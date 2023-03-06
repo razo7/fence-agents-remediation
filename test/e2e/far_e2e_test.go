@@ -55,6 +55,7 @@ var _ = Describe("FAR E2e", func() {
 	Context("fence agent - fence_ipmilan", func() {
 		var testNode *corev1.Node
 		var far *v1alpha1.FenceAgentsRemediation
+		var testStart time.Time
 		oldNodes := &corev1.NodeList{}
 		req, _ := labels.NewRequirement(hostNameLabel, selection.Exists, []string{validNodeName})
 		selector := labels.NewSelector().Add(*req)
@@ -63,6 +64,8 @@ var _ = Describe("FAR E2e", func() {
 				oldNodes, &client.ListOptions{LabelSelector: selector})).ToNot(HaveOccurred())
 			testNode = &oldNodes.Items[0]
 
+			// save boot time
+			testStart = time.Now()
 			far = createFAR(validNodeName, fenceAgentIPMI, testShareParam, testNodeParam)
 		})
 
@@ -80,6 +83,20 @@ var _ = Describe("FAR E2e", func() {
 				By("checking the command has been executed successfully")
 				checkFarLogs(testNode, cli.SuccessCommandLog)
 				log.Info("We have found that the command has been executed successfully", "Node name", validNodeName)
+			})
+			It("should reboot node", func() {
+				By("checking node's boot time")
+				Eventually(func() (time.Time, error) {
+					bootTime, err := farUtils.GetBootTime(clientSet, validNodeName, testNamespace, log)
+					if bootTime != nil && err == nil {
+						log.Info("got boot time", "time", *bootTime)
+						return *bootTime, nil
+					}
+					log.Error(err, "failed to get boot time")
+					return time.Time{}, err
+				}, timeout, pollInterval).Should(
+					BeTemporally(">", testStart),
+				)
 			})
 		})
 	})
