@@ -36,7 +36,7 @@ import (
 )
 
 var (
-	faPodLabels = map[string]string{"app": "fence-agents-remediation-operator"}
+	FaPodLabels = map[string]string{"app": "fence-agents-remediation-operator"}
 )
 
 // FenceAgentsRemediationReconciler reconciles a FenceAgentsRemediation object
@@ -115,7 +115,7 @@ func (r *FenceAgentsRemediationReconciler) getFenceAgentsPod(namespace string) (
 	pods := new(corev1.PodList)
 
 	podLabelsSelector, _ := metav1.LabelSelectorAsSelector(
-		&metav1.LabelSelector{MatchLabels: faPodLabels})
+		&metav1.LabelSelector{MatchLabels: FaPodLabels})
 	options := client.ListOptions{
 		LabelSelector: podLabelsSelector,
 		Namespace:     namespace,
