@@ -12,8 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/medik8s/fence-agents-remediation/api/v1alpha1"
@@ -34,6 +32,8 @@ const (
 	offsetExpect = 1
 )
 
+var nodeBootTime time.Time
+
 var _ = Describe("FAR E2e", func() {
 	testShareParam := map[v1alpha1.ParameterName]string{
 		"--username": "admin",
@@ -53,19 +53,17 @@ var _ = Describe("FAR E2e", func() {
 		},
 	} // get ports
 	Context("fence agent - fence_ipmilan", func() {
-		var testNode *corev1.Node
 		var far *v1alpha1.FenceAgentsRemediation
-		var testStart time.Time
-		oldNodes := &corev1.NodeList{}
-		req, _ := labels.NewRequirement(hostNameLabel, selection.Exists, []string{validNodeName})
-		selector := labels.NewSelector().Add(*req)
+		var errBoot error
+		testNode := &corev1.Node{}
 		BeforeEach(func() {
-			Expect(k8sClient.List(context.Background(),
-				oldNodes, &client.ListOptions{LabelSelector: selector})).ToNot(HaveOccurred())
-			testNode = &oldNodes.Items[0]
+			Expect(k8sClient.Get(context.Background(), client.ObjectKey{Name: validNodeName}, testNode)).ToNot(HaveOccurred())
 
-			// save boot time
-			testStart = time.Now()
+			// save the node's boot time prior to the fence agent call
+			if nodeBootTime, errBoot = getNodeBootTime(); errBoot != nil {
+				log.Error(errBoot, "Can't get the boot time of node %s, thus we don't run FAR", validNodeName)
+				Skip("skip the E2E test")
+			}
 			far = createFAR(validNodeName, fenceAgentIPMI, testShareParam, testNodeParam)
 		})
 
@@ -77,25 +75,18 @@ var _ = Describe("FAR E2e", func() {
 			It("should execute the fence agent cli command", func() {
 				By("checking the CR has been created")
 				farCR := &v1alpha1.FenceAgentsRemediation{}
-				ExpectWithOffset(2*offsetExpect, k8sClient.Get(context.Background(),
+				ExpectWithOffset(offsetExpect, k8sClient.Get(context.Background(),
 					client.ObjectKey{Name: validNodeName, Namespace: testNamespace}, farCR)).ToNot(HaveOccurred())
 
 				By("checking the command has been executed successfully")
 				checkFarLogs(testNode, cli.SuccessCommandLog)
 				log.Info("We have found that the command has been executed successfully", "Node name", validNodeName)
-			})
-			It("should reboot node", func() {
-				By("checking node's boot time")
+
+				By("checking the node's boot time after running the FA")
 				Eventually(func() (time.Time, error) {
-					bootTime, err := farUtils.GetBootTime(clientSet, validNodeName, testNamespace, log)
-					if bootTime != nil && err == nil {
-						log.Info("got boot time", "time", *bootTime)
-						return *bootTime, nil
-					}
-					log.Error(err, "failed to get boot time")
-					return time.Time{}, err
+					return getNodeBootTime()
 				}, timeout, pollInterval).Should(
-					BeTemporally(">", testStart),
+					BeTemporally(">", nodeBootTime),
 				)
 			})
 		})
@@ -125,6 +116,16 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 		}
 		return err
 	}, timeout, pollInterval).ShouldNot(HaveOccurred(), "failed to delete far")
+}
+
+func getNodeBootTime() (time.Time, error) {
+	bootTime, err := farUtils.GetBootTime(clientSet, validNodeName, testNamespace, log)
+	if bootTime != nil && err == nil {
+		log.Info("got boot time", "time", *bootTime)
+		return *bootTime, nil
+	}
+	log.Error(err, "failed to get boot time")
+	return time.Time{}, err
 }
 
 // checkFarLogs get the FAR pod and check whether its logs has logString
