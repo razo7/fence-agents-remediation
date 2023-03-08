@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	testNamespace  = "fence-agents-remediation"
+	// testNamespace  = "fence-agents-remediation"
+	testNamespace  = "openshift-operators"
 	fenceAgentIPMI = "fence_ipmilan"
 	hostNameLabel  = "kubernetes.io/hostname"
 
@@ -53,19 +54,20 @@ var _ = Describe("FAR E2e", func() {
 	Context("fence agent - fence_ipmilan", func() {
 		var far *v1alpha1.FenceAgentsRemediation
 		var errBoot error
-		// var testNode *corev1.Node
 		testNode := &corev1.Node{}
 		nodes := &corev1.NodeList{}
 		BeforeEach(func() {
 			// Use FA on the first node - master-0
 			Expect(k8sClient.List(context.Background(), nodes, &client.ListOptions{})).ToNot(HaveOccurred())
+			if len(nodes.Items) <= 1 {
+				Skip("there is one or less available nodes in the cluster")
+			}
 			testNode = &nodes.Items[0]
-			// Expect(k8sClient.Get(context.Background(), client.ObjectKey{Name: validNodeName}, testNode)).ToNot(HaveOccurred())
+			log.Info("Testing Node", "Node name", testNode.Name)
 
 			// save the node's boot time prior to the fence agent call
 			if nodeBootTime, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
-				log.Error(errBoot, "Can't get the boot time of node %s, thus we don't run FAR", testNode.Name)
-				Skip("skip the E2E test")
+				log.Error(errBoot, "Can't get boot time of the node")
 			}
 			far = createFAR(testNode.Name, fenceAgentIPMI, testShareParam, testNodeParam)
 		})
@@ -82,15 +84,24 @@ var _ = Describe("FAR E2e", func() {
 					client.ObjectKey{Name: testNode.Name, Namespace: testNamespace}, farCR)).ToNot(HaveOccurred())
 
 				By("checking the command has been executed successfully")
-				checkFarLogs(testNode, cli.SuccessCommandLog)
-				log.Info("We have found that the command has been executed successfully", "Node name", testNode.Name)
+				checkFarLogs(cli.SuccessCommandLog)
 
 				By("checking the node's boot time after running the FA")
-				Eventually(func() (time.Time, error) {
-					return getNodeBootTime(testNode.Name)
-				}, timeout, pollInterval).Should(
-					BeTemporally(">", nodeBootTime),
-				)
+				emptyTime := time.Time{}
+				if nodeBootTime != emptyTime {
+					Eventually(func() (time.Time, error) {
+						nodeBootTimeAfter, errBootAfter := getNodeBootTime(testNode.Name)
+						if errBoot != nil {
+							log.Error(errBootAfter, "Can't get boot time of the node")
+						}
+						return nodeBootTimeAfter, errBootAfter
+					}, timeout, pollInterval).Should(
+						BeTemporally(">", nodeBootTime),
+					)
+				} else {
+					Skip("we couldn't get the boot time of the node prior to FAR CR, thus we won't try to fetch and compare it now")
+				}
+
 			})
 		})
 	})
@@ -128,19 +139,17 @@ func getNodeBootTime(nodeName string) (time.Time, error) {
 		log.Info("got boot time", "time", *bootTime)
 		return *bootTime, nil
 	}
-	log.Error(err, "failed to get boot time")
 	return time.Time{}, err
 }
 
 // checkFarLogs get the FAR pod and check whether its logs has logString
-func checkFarLogs(node *corev1.Node, logString string) {
+func checkFarLogs(logString string) {
 	By("checking logs")
-	pod, err := getFenceAgentsPod(testNamespace)
-	if err != nil {
-		log.Error(err, "can't find the pod")
-		return
-	}
-	ExpectWithOffset(offsetExpect, pod).ToNot(BeNil())
+	var pod *corev1.Pod
+	EventuallyWithOffset(offsetExpect, func() *corev1.Pod {
+		pod = getFenceAgentsPod(testNamespace)
+		return pod
+	}, timeout, pollInterval).ShouldNot(BeNil(), "can't find the pod after 2 minutes")
 
 	EventuallyWithOffset(offsetExpect, func() string {
 		var err error
@@ -154,7 +163,7 @@ func checkFarLogs(node *corev1.Node, logString string) {
 }
 
 // getFenceAgentsPod fetches the FAR pod based on FAR's label and namespace
-func getFenceAgentsPod(namespace string) (*corev1.Pod, error) {
+func getFenceAgentsPod(namespace string) *corev1.Pod {
 	pods := new(corev1.PodList)
 	podLabelsSelector, _ := metav1.LabelSelectorAsSelector(
 		&metav1.LabelSelector{MatchLabels: farController.FaPodLabels})
@@ -163,7 +172,8 @@ func getFenceAgentsPod(namespace string) (*corev1.Pod, error) {
 		Namespace:     namespace,
 	}
 	if err := k8sClient.List(context.Background(), pods, &options); err != nil {
-		return nil, err
+		log.Error(err, "can't find the pod by it's labels")
+		return nil
 	}
 	if len(pods.Items) == 0 {
 		podNotFoundErr := &apiErrors.StatusError{ErrStatus: metav1.Status{
@@ -171,7 +181,8 @@ func getFenceAgentsPod(namespace string) (*corev1.Pod, error) {
 			Code:   http.StatusNotFound,
 			Reason: metav1.StatusReasonNotFound,
 		}}
-		return nil, podNotFoundErr
+		log.Error(podNotFoundErr, "Zero containers for the pod")
+		return nil
 	}
-	return &pods.Items[0], nil
+	return &pods.Items[0]
 }
