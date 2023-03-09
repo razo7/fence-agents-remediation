@@ -95,7 +95,7 @@ var _ = Describe("FAR E2e", func() {
 							log.Error(errBootAfter, "Can't get boot time of the node")
 						}
 						return nodeBootTimeAfter, errBootAfter
-					}, timeout, pollInterval).Should(
+					}, 2*timeout, pollInterval).Should(
 						BeTemporally(">", nodeBootTime),
 					)
 				} else {
@@ -149,7 +149,7 @@ func checkFarLogs(logString string) {
 	EventuallyWithOffset(offsetExpect, func() (*corev1.Pod, error) {
 		pod, err = getFenceAgentsPod(testNamespace)
 		return pod, err
-	}, 2*timeout, pollInterval).ShouldNot(BeNil(), "can't find the pod after timeout")
+	}, timeout, pollInterval).ShouldNot(BeNil(), "can't find the pod after timeout")
 
 	EventuallyWithOffset(offsetExpect, func() string {
 		logs, err := farUtils.GetLogs(clientSet, pod, "manager")
