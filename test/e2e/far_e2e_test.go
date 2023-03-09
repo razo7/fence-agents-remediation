@@ -23,7 +23,6 @@ const (
 	testNamespace = "fence-agents-remediation"
 	// testNamespace  = "openshift-operators"
 	fenceAgentIPMI = "fence_ipmilan"
-	hostNameLabel  = "kubernetes.io/hostname"
 
 	// eventually parameters
 	timeout      = 2 * time.Minute
