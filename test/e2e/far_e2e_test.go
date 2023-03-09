@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	// testNamespace  = "fence-agents-remediation"
-	testNamespace  = "openshift-operators"
+	testNamespace = "fence-agents-remediation"
+	// testNamespace  = "openshift-operators"
 	fenceAgentIPMI = "fence_ipmilan"
 	hostNameLabel  = "kubernetes.io/hostname"
 
