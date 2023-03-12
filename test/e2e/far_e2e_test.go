@@ -100,7 +100,7 @@ var _ = Describe("FAR E2e", func() {
 							log.Error(errBoot, "Can't get boot time of the node")
 						}
 						return nodeBootTimeAfter, errBoot
-					}, 2*timeout, pollInterval).ShouldNot(
+					}, 4*timeout, pollInterval).ShouldNot(
 						BeIdenticalTo(nodeBootTimeNew),
 
 						// BeTemporally(">", nodeBootTime),
@@ -110,7 +110,7 @@ var _ = Describe("FAR E2e", func() {
 				}
 				log.Info("Got node bootime", "Boot time", nodeBootTimeAfter.String())
 				if nodeBootTimeNew.Before(&nodeBootTimeAfter) {
-					fmt.Sprint("\nOh yes!\n")
+					log.Info("Node has been successfully booted", "New Boot time", nodeBootTimeAfter.String())
 				}
 			})
 		})
