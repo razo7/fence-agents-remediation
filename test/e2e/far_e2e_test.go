@@ -160,7 +160,7 @@ func getNodeBootTime(nodeName string) (metav1.Time, error) {
 	}
 	for _, condition := range node.Status.Conditions {
 		if condition.Type == "Ready" {
-			fmt.Printf("Node Ready tranistion time for condition %s is %s", condition, condition.LastTransitionTime.String())
+			log.Info("Node boot time", "Ready tranistion time", condition.LastTransitionTime.String())
 			return condition.LastTransitionTime, nil
 		}
 	}
