@@ -31,8 +31,7 @@ const (
 	offsetExpect = 1
 )
 
-var nodeBootTime time.Time
-var nodeBootTimeNew metav1.Time
+var nodeBootTimeBefore metav1.Time
 var nodeBootTimeAfter metav1.Time
 
 var _ = Describe("FAR E2e", func() {
@@ -55,6 +54,7 @@ var _ = Describe("FAR E2e", func() {
 	} // get ports
 	Context("fence agent - fence_ipmilan", func() {
 		var far *v1alpha1.FenceAgentsRemediation
+		var cond corev1.NodeCondition
 		var errBoot error
 		testNode := &corev1.Node{}
 		nodes := &corev1.NodeList{}
@@ -69,9 +69,10 @@ var _ = Describe("FAR E2e", func() {
 
 			// save the node's boot time prior to the fence agent call
 			//if nodeBootTime, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
-			if nodeBootTimeNew, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
+			if cond, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
 				log.Error(errBoot, "Can't get boot time of the node")
 			}
+			nodeBootTimeBefore = cond.LastTransitionTime
 			far = createFAR(testNode.Name, fenceAgentIPMI, testShareParam, testNodeParam)
 		})
 
@@ -92,24 +93,26 @@ var _ = Describe("FAR E2e", func() {
 				By("checking the node's boot time after running the FA")
 				//emptyTime := time.Time{}
 				// if nodeBootTime != emptyTime {
-				if !nodeBootTimeNew.IsZero() {
+				if !nodeBootTimeBefore.IsZero() {
 					// Eventually(func() (time.Time, error) {
-					Eventually(func() (metav1.Time, error) {
-						nodeBootTimeAfter, errBoot = getNodeBootTime(testNode.Name)
-						if errBoot != nil {
-							log.Error(errBoot, "Can't get boot time of the node")
-						}
-						return nodeBootTimeAfter, errBoot
-					}, 4*timeout, pollInterval).ShouldNot(
-						BeIdenticalTo(nodeBootTimeNew),
+					wasNodeRebooted(testNode.Name, nodeBootTimeBefore)
+					// 	Eventually(func() (metav1.Time, error) {
+					// 	// return wasNodeRebooted(nodeBootTimeBefore, testNode.Name)
+					// 	// nodeBootTimeAfter, errBoot = getNodeBootTime(testNode.Name)
+					// 	// if errBoot != nil {
+					// 	// 	log.Error(errBoot, "Can't get boot time of the node")
+					// 	// }
+					// 	// return nodeBootTimeAfter, errBoot
+					// }, 4*timeout, pollInterval).ShouldNot(
+					// 	BeTrue(),
 
-						// BeTemporally(">", nodeBootTime),
-					)
+					// 	// BeTemporally(">", nodeBootTime),
+					// )
 				} else {
 					Skip("we couldn't get the boot time of the node prior to FAR CR, thus we won't try to fetch and compare it now")
 				}
 
-				if nodeBootTimeNew.Before(&nodeBootTimeAfter) {
+				if nodeBootTimeBefore.Before(&nodeBootTimeAfter) {
 					log.Info("Node has been successfully booted", "New Boot time", nodeBootTimeAfter.String())
 				}
 			})
@@ -142,29 +145,44 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 	}, timeout, pollInterval).ShouldNot(HaveOccurred(), "failed to delete far")
 }
 
-// getNodeBootTime return the bootime of node nodeName if it possible, otherwise return an error
-//
-//	func getNodeBootTime(nodeName string) (time.Time, error) {
-//		bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNamespace, log)
-//		if bootTime != nil && err == nil {
-//			log.Info("got boot time", "time", *bootTime)
-//			return *bootTime, nil
-//		}
-//		return time.Time{}, err
-//	}
-func getNodeBootTime(nodeName string) (metav1.Time, error) {
-	emptyTime := metav1.NewTime(time.Time{})
+// getNodeBootTime return the last time the Node kubelet was Ready if it is possible, otherwise return an error
+func getNodeBootTime(nodeName string) (corev1.NodeCondition, error) {
+	emptyCondition := corev1.NodeCondition{}
 	node, err := clientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 	if err != nil {
-		return emptyTime, err
+		return emptyCondition, err
 	}
 	for _, condition := range node.Status.Conditions {
-		if condition.Type == "Ready" && condition.Status == "True" {
-			log.Info("Node boot time", "Ready tranistion time", condition.LastTransitionTime.String())
-			return condition.LastTransitionTime, nil
+		if condition.Type == "Ready" {
+			return condition, nil
 		}
 	}
-	return emptyTime, fmt.Errorf("Node %s is not ready", nodeName)
+	return emptyCondition, fmt.Errorf("Node %s is not ready", nodeName)
+}
+
+// wasNodeRebooted
+func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
+	bootimeReady := metav1.NewTime(time.Time{})
+	bootimeNotReady := metav1.NewTime(time.Time{})
+
+	EventuallyWithOffset(offsetExpect, func() (time.Time, time.Time) {
+		cond, err := getNodeBootTime(nodeName)
+		if err != nil {
+			log.Error(err, "Can't get boot time of the node")
+		}
+		if cond.Status == "True" {
+			log.Info("Node's status is Ready", "Last time of being Ready", cond.LastTransitionTime.String())
+			bootimeReady = cond.LastTransitionTime
+		} else {
+			log.Info("Node's status is Not Ready", "Last time of being Not Ready", cond.LastTransitionTime.String())
+			bootimeNotReady = cond.LastTransitionTime
+		}
+		return bootimeReady.Time, bootimeNotReady.Time
+	}, 4*timeout, pollInterval).Should(
+		BeTemporally(">", lastReadyTime.Time),
+		BeTemporally(">", lastReadyTime.Time),
+	)
+
 }
 
 // checkFarLogs get the FAR pod and check whether its logs has logString
