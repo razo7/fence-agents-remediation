@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -31,6 +32,7 @@ const (
 )
 
 var nodeBootTime time.Time
+var nodeBootTimeNew string
 
 var _ = Describe("FAR E2e", func() {
 	testShareParam := map[v1alpha1.ParameterName]string{
@@ -65,7 +67,8 @@ var _ = Describe("FAR E2e", func() {
 			log.Info("Testing Node", "Node name", testNode.Name)
 
 			// save the node's boot time prior to the fence agent call
-			if nodeBootTime, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
+			//if nodeBootTime, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
+			if nodeBootTimeNew, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
 				log.Error(errBoot, "Can't get boot time of the node")
 			}
 			far = createFAR(testNode.Name, fenceAgentIPMI, testShareParam, testNodeParam)
@@ -86,9 +89,11 @@ var _ = Describe("FAR E2e", func() {
 				checkFarLogs(cli.SuccessCommandLog)
 
 				By("checking the node's boot time after running the FA")
-				emptyTime := time.Time{}
-				if nodeBootTime != emptyTime {
-					Eventually(func() (time.Time, error) {
+				//emptyTime := time.Time{}
+				// if nodeBootTime != emptyTime {
+				if nodeBootTimeNew == "" {
+					// Eventually(func() (time.Time, error) {
+					Eventually(func() (string, error) {
 						nodeBootTimeAfter, errBootAfter := getNodeBootTime(testNode.Name)
 						if errBoot != nil {
 							log.Error(errBootAfter, "Can't get boot time of the node")
@@ -131,13 +136,26 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 }
 
 // getNodeBootTime return the bootime of node nodeName if it possible, otherwise return an error
-func getNodeBootTime(nodeName string) (time.Time, error) {
-	bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNamespace, log)
-	if bootTime != nil && err == nil {
-		log.Info("got boot time", "time", *bootTime)
-		return *bootTime, nil
+//
+//	func getNodeBootTime(nodeName string) (time.Time, error) {
+//		bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNamespace, log)
+//		if bootTime != nil && err == nil {
+//			log.Info("got boot time", "time", *bootTime)
+//			return *bootTime, nil
+//		}
+//		return time.Time{}, err
+//	}
+func getNodeBootTime(nodeName string) (string, error) {
+	node, err := clientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+	if err != nil {
+		return "", err
 	}
-	return time.Time{}, err
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == "Ready" {
+			return condition.LastTransitionTime.String(), nil
+		}
+	}
+	return "", fmt.Errorf("Node %s is not ready", nodeName)
 }
 
 // checkFarLogs get the FAR pod and check whether its logs has logString
