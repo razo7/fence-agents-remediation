@@ -152,6 +152,7 @@ func getNodeBootTime(nodeName string) (string, error) {
 	}
 	for _, condition := range node.Status.Conditions {
 		if condition.Type == "Ready" {
+			fmt.Printf("Node Ready tranistion time for condition %s is %s", condition, condition.LastTransitionTime.String())
 			return condition.LastTransitionTime.String(), nil
 		}
 	}
