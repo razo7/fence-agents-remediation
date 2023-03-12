@@ -153,7 +153,7 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 //		return time.Time{}, err
 //	}
 func getNodeBootTime(nodeName string) (metav1.Time, error) {
-	emptyTime = metav1.Time{}
+	emptyTime := metav1.NewTime(time.Time{})
 	node, err := clientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 	if err != nil {
 		return emptyTime, err
