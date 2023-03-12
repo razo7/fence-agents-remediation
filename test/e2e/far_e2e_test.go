@@ -32,7 +32,8 @@ const (
 )
 
 var nodeBootTime time.Time
-var nodeBootTimeNew string
+var nodeBootTimeNew metav1.Time
+var nodeBootTimeAfter metav1.Time
 
 var _ = Describe("FAR E2e", func() {
 	testShareParam := map[v1alpha1.ParameterName]string{
@@ -91,19 +92,25 @@ var _ = Describe("FAR E2e", func() {
 				By("checking the node's boot time after running the FA")
 				//emptyTime := time.Time{}
 				// if nodeBootTime != emptyTime {
-				if nodeBootTimeNew == "" {
+				if !nodeBootTimeNew.IsZero() {
 					// Eventually(func() (time.Time, error) {
-					Eventually(func() (string, error) {
-						nodeBootTimeAfter, errBootAfter := getNodeBootTime(testNode.Name)
+					Eventually(func() (metav1.Time, error) {
+						nodeBootTimeAfter, errBoot = getNodeBootTime(testNode.Name)
 						if errBoot != nil {
-							log.Error(errBootAfter, "Can't get boot time of the node")
+							log.Error(errBoot, "Can't get boot time of the node")
 						}
-						return nodeBootTimeAfter, errBootAfter
-					}, 2*timeout, pollInterval).Should(
-						BeTemporally(">", nodeBootTime),
+						return nodeBootTimeAfter, errBoot
+					}, 2*timeout, pollInterval).ShouldNot(
+						BeIdenticalTo(nodeBootTimeNew),
+
+						// BeTemporally(">", nodeBootTime),
 					)
 				} else {
 					Skip("we couldn't get the boot time of the node prior to FAR CR, thus we won't try to fetch and compare it now")
+				}
+				log.Info("Got node bootime", "Boot time", nodeBootTimeAfter.String())
+				if nodeBootTimeNew.Before(&nodeBootTimeAfter) {
+					fmt.Sprint("\nOh yes!\n")
 				}
 			})
 		})
@@ -145,18 +152,19 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 //		}
 //		return time.Time{}, err
 //	}
-func getNodeBootTime(nodeName string) (string, error) {
+func getNodeBootTime(nodeName string) (metav1.Time, error) {
+	emptyTime = metav1.Time{}
 	node, err := clientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
 	if err != nil {
-		return "", err
+		return emptyTime, err
 	}
 	for _, condition := range node.Status.Conditions {
 		if condition.Type == "Ready" {
 			fmt.Printf("Node Ready tranistion time for condition %s is %s", condition, condition.LastTransitionTime.String())
-			return condition.LastTransitionTime.String(), nil
+			return condition.LastTransitionTime, nil
 		}
 	}
-	return "", fmt.Errorf("Node %s is not ready", nodeName)
+	return emptyTime, fmt.Errorf("Node %s is not ready", nodeName)
 }
 
 // checkFarLogs get the FAR pod and check whether its logs has logString
