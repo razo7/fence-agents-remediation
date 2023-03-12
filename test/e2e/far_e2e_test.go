@@ -108,7 +108,7 @@ var _ = Describe("FAR E2e", func() {
 				} else {
 					Skip("we couldn't get the boot time of the node prior to FAR CR, thus we won't try to fetch and compare it now")
 				}
-				log.Info("Got node bootime", "Boot time", nodeBootTimeAfter.String())
+
 				if nodeBootTimeNew.Before(&nodeBootTimeAfter) {
 					log.Info("Node has been successfully booted", "New Boot time", nodeBootTimeAfter.String())
 				}
@@ -159,7 +159,7 @@ func getNodeBootTime(nodeName string) (metav1.Time, error) {
 		return emptyTime, err
 	}
 	for _, condition := range node.Status.Conditions {
-		if condition.Type == "Ready" {
+		if condition.Type == "Ready" && condition.Status == "True" {
 			log.Info("Node boot time", "Ready tranistion time", condition.LastTransitionTime.String())
 			return condition.LastTransitionTime, nil
 		}
