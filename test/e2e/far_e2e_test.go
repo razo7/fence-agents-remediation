@@ -31,10 +31,6 @@ const (
 	offsetExpect = 1
 )
 
-var nodeBootTimeBefore metav1.Time
-
-// var nodeBootTimeAfter metav1.Time
-
 var _ = Describe("FAR E2e", func() {
 	testShareParam := map[v1alpha1.ParameterName]string{
 		"--username": "admin",
@@ -54,23 +50,25 @@ var _ = Describe("FAR E2e", func() {
 		},
 	} // get ports
 	Context("fence agent - fence_ipmilan", func() {
-		var far *v1alpha1.FenceAgentsRemediation
-		var cond corev1.NodeCondition
-		var errBoot error
+		var (
+			nodeBootTimeBefore metav1.Time
+			far                *v1alpha1.FenceAgentsRemediation
+			cond               corev1.NodeCondition
+			errBoot            error
+		)
 		testNode := &corev1.Node{}
 		nodes := &corev1.NodeList{}
 		BeforeEach(func() {
-			// Use FA on the first node - master-0
 			Expect(k8sClient.List(context.Background(), nodes, &client.ListOptions{})).ToNot(HaveOccurred())
 			if len(nodes.Items) <= 1 {
 				Skip("there is one or less available nodes in the cluster")
 			}
 			//TODO: Randomize the node selection
+			// Use FA on the first node - master-0
 			testNode = &nodes.Items[0]
 			log.Info("Testing Node", "Node name", testNode.Name)
 
 			// save the node's boot time prior to the fence agent call
-			//if nodeBootTime, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
 			if cond, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
 				log.Error(errBoot, "Can't get boot time of the node")
 			}
@@ -93,30 +91,11 @@ var _ = Describe("FAR E2e", func() {
 				checkFarLogs(cli.SuccessCommandLog)
 
 				By("checking the node's boot time after running the FA")
-				//emptyTime := time.Time{}
-				// if nodeBootTime != emptyTime {
 				if !nodeBootTimeBefore.IsZero() {
-					// Eventually(func() (time.Time, error) {
 					wasNodeRebooted(testNode.Name, nodeBootTimeBefore)
-					// 	Eventually(func() (metav1.Time, error) {
-					// 	// return wasNodeRebooted(nodeBootTimeBefore, testNode.Name)
-					// 	// nodeBootTimeAfter, errBoot = getNodeBootTime(testNode.Name)
-					// 	// if errBoot != nil {
-					// 	// 	log.Error(errBoot, "Can't get boot time of the node")
-					// 	// }
-					// 	// return nodeBootTimeAfter, errBoot
-					// }, 4*timeout, pollInterval).ShouldNot(
-					// 	BeTrue(),
-
-					// 	// BeTemporally(">", nodeBootTime),
-					// )
 				} else {
-					Skip("we couldn't get the boot time of the node prior to FAR CR, thus we won't try to fetch and compare it now")
+					Skip("we couldn't get the boot time of the node prior to FAR CR, thus we can't verify if it was rebooted")
 				}
-
-				// if nodeBootTimeBefore.Before(&nodeBootTimeAfter) {
-				// 	log.Info("Node has been successfully booted", "New Boot time", nodeBootTimeAfter.String())
-				// }
 			})
 		})
 	})
@@ -147,7 +126,7 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 	}, timeout, pollInterval).ShouldNot(HaveOccurred(), "failed to delete far")
 }
 
-// getNodeBootTime return the last time the Node kubelet was Ready if it is possible, otherwise return an error
+// getNodeBootTime return the  condition of Node kubelet, otherwise return an error
 func getNodeBootTime(nodeName string) (corev1.NodeCondition, error) {
 	emptyCondition := corev1.NodeCondition{}
 	node, err := clientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
@@ -162,7 +141,7 @@ func getNodeBootTime(nodeName string) (corev1.NodeCondition, error) {
 	return emptyCondition, fmt.Errorf("Node %s is not ready", nodeName)
 }
 
-// wasNodeRebooted
+// wasNodeRebooted wait for kublet status to switch from flase to true
 func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
 	kubletPhase := "was ready"
 	EventuallyWithOffset(offsetExpect, func() string {
@@ -180,10 +159,8 @@ func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
 			kubletPhase = "not ready"
 			log.Info("Node's status is Not Ready", "Last time of being Not Ready", cond.LastTransitionTime.String())
 		}
-		fmt.Printf("\nkubletPhase:%s\n", kubletPhase)
 		return kubletPhase
 	}, 2*timeout, pollInterval).Should(BeIdenticalTo("ready"))
-
 }
 
 // checkFarLogs get the FAR pod and check whether its logs has logString
