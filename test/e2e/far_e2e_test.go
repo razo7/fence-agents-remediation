@@ -32,7 +32,8 @@ const (
 )
 
 var nodeBootTimeBefore metav1.Time
-var nodeBootTimeAfter metav1.Time
+
+// var nodeBootTimeAfter metav1.Time
 
 var _ = Describe("FAR E2e", func() {
 	testShareParam := map[v1alpha1.ParameterName]string{
@@ -172,12 +173,15 @@ func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
 			log.Error(err, "Can't get boot time of the node")
 		}
 		if cond.Status == "True" {
+			log.Info("Node's status is Ready", "Last time of being Ready", cond.LastTransitionTime.String())
 			if cycle == 0 {
 				cycle = 1
-			} else {
-				cycle = 3
 			}
-			log.Info("Node's status is Ready", "Last time of being Ready", cond.LastTransitionTime.String())
+			if cycle == 2 {
+				cycle = 3
+				log.Info("Node has been successfully booted", "Boot time before FAR", lastReadyTime.String(), "Boot time after FAR", cond.LastTransitionTime.String())
+			}
+
 			// bootimeReady = cond.LastTransitionTime
 		} else {
 			cycle = 2
@@ -185,7 +189,7 @@ func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
 			// bootimeNotReady = cond.LastTransitionTime
 		}
 		return cycle
-	}, 4*timeout, pollInterval).Should(BeNumerically("==", 3))
+	}, timeout, pollInterval).Should(BeNumerically("==", 3))
 
 }
 
