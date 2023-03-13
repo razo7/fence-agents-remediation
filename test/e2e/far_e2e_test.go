@@ -163,33 +163,25 @@ func getNodeBootTime(nodeName string) (corev1.NodeCondition, error) {
 
 // wasNodeRebooted
 func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
-	// bootimeReady := metav1.NewTime(time.Time{})
-	// bootimeNotReady := metav1.NewTime(time.Time{})
-	cycle := 0
-	EventuallyWithOffset(offsetExpect, func() int {
-
+	// kubletPhase := "None"
+	EventuallyWithOffset(offsetExpect, func() bool {
+		var wasRebooted bool
 		cond, err := getNodeBootTime(nodeName)
 		if err != nil {
 			log.Error(err, "Can't get boot time of the node")
 		}
 		if cond.Status == "True" {
 			log.Info("Node's status is Ready", "Last time of being Ready", cond.LastTransitionTime.String())
-			if cycle == 0 {
-				cycle = 1
-			}
-			if cycle == 2 {
-				cycle = 3
+			if !wasRebooted {
+				wasRebooted = true
 				log.Info("Node has been successfully booted", "Boot time before FAR", lastReadyTime.String(), "Boot time after FAR", cond.LastTransitionTime.String())
 			}
-
-			// bootimeReady = cond.LastTransitionTime
 		} else {
-			cycle = 2
+			wasRebooted = false
 			log.Info("Node's status is Not Ready", "Last time of being Not Ready", cond.LastTransitionTime.String())
-			// bootimeNotReady = cond.LastTransitionTime
 		}
-		return cycle
-	}, 2*timeout, pollInterval).Should(BeNumerically("==", 3))
+		return wasRebooted
+	}, 2*timeout, pollInterval).Should(BeTrue())
 
 }
 
