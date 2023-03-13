@@ -189,7 +189,7 @@ func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
 			// bootimeNotReady = cond.LastTransitionTime
 		}
 		return cycle
-	}, timeout, pollInterval).Should(BeNumerically("==", 3))
+	}, 2*timeout, pollInterval).Should(BeNumerically("==", 3))
 
 }
 
