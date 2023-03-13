@@ -179,6 +179,7 @@ func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
 			kubletPhase = "Not Ready"
 			log.Info("Node's status is Not Ready", "Last time of being Not Ready", cond.LastTransitionTime.String())
 		}
+		fmt.Printf("\nkubletPhase:%s\n", kubletPhase)
 		return kubletPhase
 	}, 2*timeout, pollInterval).Should(BeIdenticalTo("Ready"))
 
