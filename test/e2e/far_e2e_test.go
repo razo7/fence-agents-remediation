@@ -65,6 +65,7 @@ var _ = Describe("FAR E2e", func() {
 			if len(nodes.Items) <= 1 {
 				Skip("there is one or less available nodes in the cluster")
 			}
+			//TODO: Randomize the node selection
 			testNode = &nodes.Items[0]
 			log.Info("Testing Node", "Node name", testNode.Name)
 
@@ -163,7 +164,7 @@ func getNodeBootTime(nodeName string) (corev1.NodeCondition, error) {
 
 // wasNodeRebooted
 func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
-	kubletPhase := "None"
+	kubletPhase := "was ready"
 	EventuallyWithOffset(offsetExpect, func() string {
 		cond, err := getNodeBootTime(nodeName)
 		if err != nil {
@@ -171,17 +172,17 @@ func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
 		}
 		if cond.Status == "True" {
 			log.Info("Node's status is Ready", "Last time of being Ready", cond.LastTransitionTime.String())
-			if kubletPhase == "Not Ready" {
-				kubletPhase = " Ready"
+			if kubletPhase == "not ready" {
+				kubletPhase = "ready"
 				log.Info("Node has been successfully booted", "Boot time before FAR", lastReadyTime.String(), "Boot time after FAR", cond.LastTransitionTime.String())
 			}
 		} else {
-			kubletPhase = "Not Ready"
+			kubletPhase = "not ready"
 			log.Info("Node's status is Not Ready", "Last time of being Not Ready", cond.LastTransitionTime.String())
 		}
 		fmt.Printf("\nkubletPhase:%s\n", kubletPhase)
 		return kubletPhase
-	}, 2*timeout, pollInterval).Should(BeIdenticalTo("Ready"))
+	}, 2*timeout, pollInterval).Should(BeIdenticalTo("ready"))
 
 }
 
