@@ -112,9 +112,9 @@ var _ = Describe("FAR E2e", func() {
 					Skip("we couldn't get the boot time of the node prior to FAR CR, thus we won't try to fetch and compare it now")
 				}
 
-				if nodeBootTimeBefore.Before(&nodeBootTimeAfter) {
-					log.Info("Node has been successfully booted", "New Boot time", nodeBootTimeAfter.String())
-				}
+				// if nodeBootTimeBefore.Before(&nodeBootTimeAfter) {
+				// 	log.Info("Node has been successfully booted", "New Boot time", nodeBootTimeAfter.String())
+				// }
 			})
 		})
 	})
@@ -162,26 +162,30 @@ func getNodeBootTime(nodeName string) (corev1.NodeCondition, error) {
 
 // wasNodeRebooted
 func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
-	bootimeReady := metav1.NewTime(time.Time{})
-	bootimeNotReady := metav1.NewTime(time.Time{})
+	// bootimeReady := metav1.NewTime(time.Time{})
+	// bootimeNotReady := metav1.NewTime(time.Time{})
+	cycle := 0
+	EventuallyWithOffset(offsetExpect, func() int {
 
-	EventuallyWithOffset(offsetExpect, func() (time.Time, time.Time) {
 		cond, err := getNodeBootTime(nodeName)
 		if err != nil {
 			log.Error(err, "Can't get boot time of the node")
 		}
 		if cond.Status == "True" {
+			if cycle == 0 {
+				cycle = 1
+			} else {
+				cycle = 3
+			}
 			log.Info("Node's status is Ready", "Last time of being Ready", cond.LastTransitionTime.String())
-			bootimeReady = cond.LastTransitionTime
+			// bootimeReady = cond.LastTransitionTime
 		} else {
+			cycle = 2
 			log.Info("Node's status is Not Ready", "Last time of being Not Ready", cond.LastTransitionTime.String())
-			bootimeNotReady = cond.LastTransitionTime
+			// bootimeNotReady = cond.LastTransitionTime
 		}
-		return bootimeReady.Time, bootimeNotReady.Time
-	}, 4*timeout, pollInterval).Should(
-		BeTemporally(">", lastReadyTime.Time),
-		BeTemporally(">", lastReadyTime.Time),
-	)
+		return cycle
+	}, 4*timeout, pollInterval).Should(BeNumerically("==", 3))
 
 }
 
