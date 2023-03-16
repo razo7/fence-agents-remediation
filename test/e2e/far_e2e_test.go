@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	apiErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,21 +26,28 @@ const (
 	testNamespace  = "fence-agents-remediation"
 	fenceAgentIPMI = "fence_ipmilan"
 
+	nodeExecTimeout = 20 * time.Second
 	// eventually parameters
 	timeout      = 2 * time.Minute
 	pollInterval = 10 * time.Second
 	offsetExpect = 1
 )
 
+var (
+	testShareParamHC map[v1alpha1.ParameterName]string
+	testNodeParamHC  map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string
+	testNodeParam    map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string
+)
+
 var _ = Describe("FAR E2e", func() {
-	testShareParam := map[v1alpha1.ParameterName]string{
+	testShareParamHC = map[v1alpha1.ParameterName]string{
 		"--username": "admin",
 		"--password": "password",
 		"--action":   "reboot",
 		"--ip":       "192.168.111.1",
 		"--lanplus":  "",
 	}
-	testNodeParam := map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string{
+	testNodeParamHC = map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string{
 		"--ipport": {
 			"master-0": "6230",
 			"master-1": "6231",
@@ -81,7 +90,8 @@ var _ = Describe("FAR E2e", func() {
 			// 	Fail("Can't get the Ready condition of node's Kubelet or its time is zero, thus we can't verify if it has been changed, and the node has been rebooted")
 			// }
 
-			far = createFAR(testNodeName, fenceAgentIPMI, testShareParam, testNodeParam)
+			testNodeParam = buildNodeParameters(getClusterNodeNames(testNodeName), getClusterNodePorts(testNodeName))
+			far = createFAR(testNodeName, fenceAgentIPMI, testShareParamHC, testNodeParamHC)
 		})
 
 		AfterEach(func() {
@@ -104,6 +114,17 @@ var _ = Describe("FAR E2e", func() {
 		})
 	})
 })
+
+func buildNodeParameters(nodeNames []string, nodePorts []string) map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string {
+	var nodeNamePorts map[v1alpha1.NodeName]string
+
+	for i, name := range nodeNames {
+		keyName := v1alpha1.NodeName(name)
+		nodeNamePorts[keyName] = nodePorts[i]
+	}
+	testNodeParam := map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string{v1alpha1.ParameterName("--ipport"): nodeNamePorts}
+	return testNodeParam
+}
 
 // createFAR assign the input to FenceAgentsRemediation object, create CR it with offset, and return the CR object
 func createFAR(nodeName string, agent string, sharedparameters map[v1alpha1.ParameterName]string, nodeparameters map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string) *v1alpha1.FenceAgentsRemediation {
@@ -214,4 +235,59 @@ func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
 		}
 		return cond.Status == corev1.ConditionTrue && cond.LastTransitionTime.After(lastReadyTime.Time)
 	}, 2*timeout, pollInterval).Should(BeTrue())
+}
+
+func getBootTime(node *v1.Node) (*time.Time, error) {
+	bootTimeCommand := []string{"uptime", "-s"}
+	var bootTime time.Time
+	Eventually(func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), nodeExecTimeout)
+		defer cancel()
+		bootTimeString, err := farUtils.ExecCommandOnNode(k8sClient, bootTimeCommand, node, ctx)
+		if err != nil {
+			return err
+		}
+		bootTime, err = time.Parse("2006-01-02 15:04:05", bootTimeString)
+		if err != nil {
+			return err
+		}
+		return nil
+	}, 6*time.Minute, 10*time.Second).ShouldNot(HaveOccurred())
+	return &bootTime, nil
+}
+
+func checkReboot(node *v1.Node, oldBootTime *time.Time) {
+	By("checking reboot")
+	log.Info("boot time", "old", oldBootTime)
+	// Note: short timeout only because this check runs after node re-create check,
+	// where already multiple minute were spent
+	EventuallyWithOffset(1, func() time.Time {
+		newBootTime, err := getBootTime(node)
+		if err != nil {
+			return time.Time{}
+		}
+		log.Info("boot time", "new", newBootTime)
+		return *newBootTime
+	}, 7*time.Minute, 10*time.Second).Should(BeTemporally(">", *oldBootTime))
+}
+
+func getClusterNodeNames(nodeName string) []string {
+	output, _ := farUtils.RunCommandInCluster(clientSet, nodeName, testNamespace, "vbmc list | tail -n +4 | head -n -1 | awk '{print $2}' | paste -s -d ' '", log)
+	// if err != nil {
+	// 	return "", err
+	// }
+	res := strings.Split(output, " ")
+	log.Info("Cluster", "Node Names", res)
+	return res
+}
+
+func getClusterNodePorts(nodeName string) []string {
+	output, _ := farUtils.RunCommandInCluster(clientSet, nodeName, testNamespace, "vbmc list | tail -n +4 | head -n -1 | awk '{print $8}' | paste -s -d ' '", log)
+	// if err != nil {
+	// 	return "", err
+	// }
+
+	res := strings.Split(output, " ")
+	log.Info("Cluster", "Node Ports", res)
+	return res
 }
