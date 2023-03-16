@@ -24,7 +24,7 @@ import (
 
 // GetBootTime gets the boot time of the given node by running a pod on it executing uptime command
 func GetBootTime(c *kubernetes.Clientset, nodeName string, ns string, log logr.Logger) (*time.Time, error) {
-	output, err := RunCommandInCluster(c, nodeName, ns, "uptime -s", log)
+	output, err := RunCommandInCluster(c, nodeName, ns, "microdnf install procps -y >/dev/null 2>&1 && uptime -s", log)
 	if err != nil {
 		return nil, err
 	}
