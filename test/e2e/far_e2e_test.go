@@ -75,7 +75,7 @@ var _ = Describe("FAR E2e", func() {
 			}
 			//TODO: Randomize the node selection
 			// Use FA on the first node - master-0
-			nodeObj = nodes.Items[0]
+			nodeObj = nodes.Items[2]
 			testNodeName = nodeObj.Name
 			log.Info("Testing Node", "Node name", testNodeName)
 
