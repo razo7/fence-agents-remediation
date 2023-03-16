@@ -65,7 +65,7 @@ var _ = Describe("FAR E2e", func() {
 			//TODO: Randomize the node selection
 			// Use FA on the first node - master-0
 			nodeObj := &nodes.Items[0]
-			testNodeName := nodeObj.Name
+			testNodeName = nodeObj.Name
 			log.Info("Testing Node", "Node name", testNodeName)
 
 			// save the node's boot time prior to the fence agent call
@@ -134,7 +134,7 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 func getNodeBootTime(nodeName string) (time.Time, error) {
 	bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNamespace, log)
 	if bootTime != nil && err == nil {
-		log.Info("got boot time", "time", *bootTime, "node", nodeName)
+		log.Info("got boot time", "node", nodeName, "time", *bootTime)
 		return *bootTime, nil
 	}
 	return time.Time{}, err
