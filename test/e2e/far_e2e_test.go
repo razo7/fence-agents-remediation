@@ -96,13 +96,15 @@ var _ = Describe("FAR E2e", func() {
 			// }
 			// commandNames := "vbmc list | tail -n +4 | head -n -1 | awk '{print $2}' | paste -s -d ' '"
 			// commandPorts := "vbmc list | tail -n +4 | head -n -1 | awk '{print $8}' | paste -s -d ' '"
+
+			commandNamesArray := []string{"vbmc", "list", "|", "tail", "-n", "+4", "|", "head", "-n", "-1", "|", "awk", "'{print $2}'", "|", "paste", "-s", "-d", "'", "'"}
 			commandInstallPython := []string{"sudo", "dnf", "install", "python39-devel", "-y"}
 			commandInstallVBMC := []string{"sudo", "pip3", "install", "virtualbmc", "-y"}
-			commandInstallVBMC = append(commandInstallPython, commandInstallVBMC...)
-			commandNamesArray := []string{"vbmc", "list", "|", "tail", "-n", "+4", "|", "head", "-n", "-1", "|", "awk", "'{print $2}'", "|", "paste", "-s", "-d", "'", "'"}
-			commandNamesArray = append(commandNamesArray, commandInstallVBMC...)
+
 			commandPortsArray := []string{"vbmc", "list", "|", "tail", "-n", "+4", "|", "head", "-n", "-1", "|", "awk", "'{print $8}'", "|", "paste", "-s", "-d", "'", "'"}
 			commandPortsArray = append(commandPortsArray, commandInstallVBMC...)
+			commandPortsArray = append(commandPortsArray, commandInstallPython...)
+
 			ctx, _ := context.WithTimeout(context.Background(), nodeExecTimeout)
 			fmt.Printf("Nodes info: names %s, and ports %s",
 				getClusterNodeInfo(testNodeName, commandNamesArray, &nodeObj, ctx),
