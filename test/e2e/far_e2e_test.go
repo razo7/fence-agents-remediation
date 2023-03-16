@@ -60,10 +60,12 @@ var _ = Describe("FAR E2e", func() {
 	Context("fence agent - fence_ipmilan", func() {
 		var (
 			// kubeletReadyTimeBefore metav1.Time
-			far                *v1alpha1.FenceAgentsRemediation
-			nodeBootTimeBefore time.Time
-			errBoot            error
-			testNodeName       string
+			far                   *v1alpha1.FenceAgentsRemediation
+			nodeBootTimeBefore    time.Time
+			errBoot               error
+			testNodeName          string
+			nodeObj               v1.Node
+			nodeBootTimeBeforeRef *time.Time
 		)
 		nodes := &corev1.NodeList{}
 		BeforeEach(func() {
@@ -73,12 +75,15 @@ var _ = Describe("FAR E2e", func() {
 			}
 			//TODO: Randomize the node selection
 			// Use FA on the first node - master-0
-			nodeObj := &nodes.Items[0]
+			nodeObj = nodes.Items[0]
 			testNodeName = nodeObj.Name
 			log.Info("Testing Node", "Node name", testNodeName)
 
 			// save the node's boot time prior to the fence agent call
-			nodeBootTimeBefore, errBoot = getNodeBootTime(testNodeName)
+
+			nodeBootTimeBeforeRef, errBoot = getBootTime(&nodeObj)
+
+			// nodeBootTimeBefore, errBoot = getNodeBootTime(testNodeName)
 			if errBoot != nil {
 				Fail("Can't get boot time of the node")
 			}
@@ -90,7 +95,7 @@ var _ = Describe("FAR E2e", func() {
 			// 	Fail("Can't get the Ready condition of node's Kubelet or its time is zero, thus we can't verify if it has been changed, and the node has been rebooted")
 			// }
 
-			testNodeParam = buildNodeParameters(getClusterNodeNames(testNodeName), getClusterNodePorts(testNodeName))
+			// testNodeParam = buildNodeParameters(getClusterNodeNames(testNodeName), getClusterNodePorts(testNodeName))
 			far = createFAR(testNodeName, fenceAgentIPMI, testShareParamHC, testNodeParamHC)
 		})
 
@@ -108,7 +113,8 @@ var _ = Describe("FAR E2e", func() {
 				checkFarLogs(cli.SuccessCommandLog)
 
 				By("checking the node's boot time after running the FA")
-				wasNodeRebootedBoot(testNodeName, nodeBootTimeBefore)
+				checkReboot(&nodeObj, nodeBootTimeBeforeRef)
+				// wasNodeRebootedBoot(testNodeName, nodeBootTimeBefore)
 				//wasNodeRebooted(testNodeName, kubeletReadyTimeBefore)
 			})
 		})
