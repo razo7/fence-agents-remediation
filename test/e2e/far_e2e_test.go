@@ -134,7 +134,7 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 func getNodeBootTime(nodeName string) (time.Time, error) {
 	bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNamespace, log)
 	if bootTime != nil && err == nil {
-		log.Info("got boot time", "time", *bootTime)
+		log.Info("got boot time", "time", *bootTime, "node", nodeName)
 		return *bootTime, nil
 	}
 	return time.Time{}, err
