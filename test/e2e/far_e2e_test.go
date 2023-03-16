@@ -2,7 +2,8 @@ package e2e
 
 import (
 	"context"
-	"net/http"
+	"errors"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -20,18 +21,14 @@ import (
 )
 
 const (
-	// testNamespace  = "fence-agents-remediation"
-	testNamespace  = "openshift-operators"
+	testNamespace  = "fence-agents-remediation"
 	fenceAgentIPMI = "fence_ipmilan"
-	hostNameLabel  = "kubernetes.io/hostname"
 
 	// eventually parameters
 	timeout      = 2 * time.Minute
 	pollInterval = 10 * time.Second
 	offsetExpect = 1
 )
-
-var nodeBootTime time.Time
 
 var _ = Describe("FAR E2e", func() {
 	testShareParam := map[v1alpha1.ParameterName]string{
@@ -52,24 +49,39 @@ var _ = Describe("FAR E2e", func() {
 		},
 	} // get ports
 	Context("fence agent - fence_ipmilan", func() {
-		var far *v1alpha1.FenceAgentsRemediation
-		var errBoot error
-		testNode := &corev1.Node{}
+		var (
+			// kubeletReadyTimeBefore metav1.Time
+			far                *v1alpha1.FenceAgentsRemediation
+			nodeBootTimeBefore time.Time
+			errBoot            error
+			testNodeName       string
+		)
 		nodes := &corev1.NodeList{}
 		BeforeEach(func() {
-			// Use FA on the first node - master-0
 			Expect(k8sClient.List(context.Background(), nodes, &client.ListOptions{})).ToNot(HaveOccurred())
 			if len(nodes.Items) <= 1 {
-				Skip("there is one or less available nodes in the cluster")
+				Fail("there is one or less available nodes in the cluster")
 			}
-			testNode = &nodes.Items[0]
-			log.Info("Testing Node", "Node name", testNode.Name)
+			//TODO: Randomize the node selection
+			// Use FA on the first node - master-0
+			nodeObj := &nodes.Items[0]
+			testNodeName := nodeObj.Name
+			log.Info("Testing Node", "Node name", testNodeName)
 
 			// save the node's boot time prior to the fence agent call
-			if nodeBootTime, errBoot = getNodeBootTime(testNode.Name); errBoot != nil {
-				log.Error(errBoot, "Can't get boot time of the node")
+			nodeBootTimeBefore, errBoot = getNodeBootTime(testNodeName)
+			if errBoot != nil {
+				Fail("Can't get boot time of the node")
 			}
-			far = createFAR(testNode.Name, fenceAgentIPMI, testShareParam, testNodeParam)
+
+			// // save the last time Ready condition of node's Kubelet has been changed
+			// cond, errBoot := getKubeletReadyCondition(testNodeName)
+			// kubeletReadyTimeBefore = cond.LastTransitionTime
+			// if errBoot != nil || kubeletReadyTimeBefore.IsZero() {
+			// 	Fail("Can't get the Ready condition of node's Kubelet or its time is zero, thus we can't verify if it has been changed, and the node has been rebooted")
+			// }
+
+			far = createFAR(testNodeName, fenceAgentIPMI, testShareParam, testNodeParam)
 		})
 
 		AfterEach(func() {
@@ -79,29 +91,15 @@ var _ = Describe("FAR E2e", func() {
 		When("running FAR to reboot node ", func() {
 			It("should execute the fence agent cli command", func() {
 				By("checking the CR has been created")
-				farCR := &v1alpha1.FenceAgentsRemediation{}
-				ExpectWithOffset(offsetExpect, k8sClient.Get(context.Background(),
-					client.ObjectKey{Name: testNode.Name, Namespace: testNamespace}, farCR)).ToNot(HaveOccurred())
+				testFarCR := &v1alpha1.FenceAgentsRemediation{}
+				Expect(k8sClient.Get(context.Background(), client.ObjectKeyFromObject(far), testFarCR)).ToNot(HaveOccurred())
 
 				By("checking the command has been executed successfully")
 				checkFarLogs(cli.SuccessCommandLog)
 
 				By("checking the node's boot time after running the FA")
-				emptyTime := time.Time{}
-				if nodeBootTime != emptyTime {
-					Eventually(func() (time.Time, error) {
-						nodeBootTimeAfter, errBootAfter := getNodeBootTime(testNode.Name)
-						if errBoot != nil {
-							log.Error(errBootAfter, "Can't get boot time of the node")
-						}
-						return nodeBootTimeAfter, errBootAfter
-					}, timeout, pollInterval).Should(
-						BeTemporally(">", nodeBootTime),
-					)
-				} else {
-					Skip("we couldn't get the boot time of the node prior to FAR CR, thus we won't try to fetch and compare it now")
-				}
-
+				wasNodeRebootedBoot(testNodeName, nodeBootTimeBefore)
+				//wasNodeRebooted(testNodeName, kubeletReadyTimeBefore)
 			})
 		})
 	})
@@ -142,17 +140,42 @@ func getNodeBootTime(nodeName string) (time.Time, error) {
 	return time.Time{}, err
 }
 
+func wasNodeRebootedBoot(nodeName string, nodeBootTimeBefore time.Time) {
+	Eventually(func() (time.Time, error) {
+		nodeBootTimeAfter, errBootAfter := getNodeBootTime(nodeName)
+		if errBootAfter != nil {
+			log.Error(errBootAfter, "Can't get boot time of the node")
+		}
+		return nodeBootTimeAfter, errBootAfter
+	}, timeout, pollInterval).Should(
+		BeTemporally(">", nodeBootTimeBefore),
+	)
+}
+
+// getKubeletReadyCondition return the Ready condition of the node's kubelet, otherwise return an error
+func getKubeletReadyCondition(nodeName string) (corev1.NodeCondition, error) {
+	emptyCondition := corev1.NodeCondition{}
+	node, err := clientSet.CoreV1().Nodes().Get(context.Background(), nodeName, metav1.GetOptions{})
+	if err != nil {
+		return emptyCondition, err
+	}
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == corev1.NodeReady {
+			return condition, nil
+		}
+	}
+	return emptyCondition, fmt.Errorf("Node %s is not ready", nodeName)
+}
+
 // checkFarLogs get the FAR pod and check whether its logs has logString
 func checkFarLogs(logString string) {
-	By("checking logs")
 	var pod *corev1.Pod
 	EventuallyWithOffset(offsetExpect, func() *corev1.Pod {
 		pod = getFenceAgentsPod(testNamespace)
 		return pod
-	}, timeout, pollInterval).ShouldNot(BeNil(), "can't find the pod after 2 minutes")
+	}, timeout, pollInterval).ShouldNot(BeNil(), "can't find the pod after timeout")
 
 	EventuallyWithOffset(offsetExpect, func() string {
-		var err error
 		logs, err := farUtils.GetLogs(clientSet, pod, "manager")
 		if err != nil {
 			log.Error(err, "failed to get logs. Might try again")
@@ -176,13 +199,19 @@ func getFenceAgentsPod(namespace string) *corev1.Pod {
 		return nil
 	}
 	if len(pods.Items) == 0 {
-		podNotFoundErr := &apiErrors.StatusError{ErrStatus: metav1.Status{
-			Status: metav1.StatusFailure,
-			Code:   http.StatusNotFound,
-			Reason: metav1.StatusReasonNotFound,
-		}}
-		log.Error(podNotFoundErr, "Zero containers for the pod")
+		log.Error(errors.New("API error"), "Zero containers for the pod")
 		return nil
 	}
 	return &pods.Items[0]
+}
+
+// wasNodeRebooted wait until the node's Kubelet condition status is ready (again) and it is after the time of lastReadyTime
+func wasNodeRebooted(nodeName string, lastReadyTime metav1.Time) {
+	EventuallyWithOffset(offsetExpect, func() bool {
+		cond, err := getKubeletReadyCondition(nodeName)
+		if err != nil {
+			log.Error(err, "Can't get boot time of the node")
+		}
+		return cond.Status == corev1.ConditionTrue && cond.LastTransitionTime.After(lastReadyTime.Time)
+	}, 2*timeout, pollInterval).Should(BeTrue())
 }
