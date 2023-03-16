@@ -94,7 +94,15 @@ var _ = Describe("FAR E2e", func() {
 			// if errBoot != nil || kubeletReadyTimeBefore.IsZero() {
 			// 	Fail("Can't get the Ready condition of node's Kubelet or its time is zero, thus we can't verify if it has been changed, and the node has been rebooted")
 			// }
-
+			// commandNames := "vbmc list | tail -n +4 | head -n -1 | awk '{print $2}' | paste -s -d ' '"
+			// commandPorts := "vbmc list | tail -n +4 | head -n -1 | awk '{print $8}' | paste -s -d ' '"
+			commandNamesArray := []string{"vbmc", "list", "|", "tail", "-n", "+4", "|", "head", "-n", "-1", "|", "awk", "'{print $2}'", "|", "paste", "-s", "-d", "'", "'"}
+			commandPortsArray := []string{"vbmc", "list", "|", "tail", "-n", "+4", "|", "head", "-n", "-1", "|", "awk", "'{print $8}'", "|", "paste", "-s", "-d", "'", "'"}
+			ctx, _ := context.WithTimeout(context.Background(), nodeExecTimeout)
+			fmt.Printf("Nodes info: names %s, and ports %s",
+				getClusterNodeInfo(testNodeName, commandNamesArray, &nodeObj, ctx),
+				getClusterNodeInfo(testNodeName, commandPortsArray, &nodeObj, ctx),
+			)
 			// testNodeParam = buildNodeParameters(getClusterNodeNames(testNodeName), getClusterNodePorts(testNodeName))
 			far = createFAR(testNodeName, fenceAgentIPMI, testShareParamHC, testNodeParamHC)
 		})
@@ -277,23 +285,13 @@ func checkReboot(node *v1.Node, oldBootTime *time.Time) {
 	}, 7*time.Minute, 10*time.Second).Should(BeTemporally(">", *oldBootTime))
 }
 
-func getClusterNodeNames(nodeName string) []string {
-	output, _ := farUtils.RunCommandInCluster(clientSet, nodeName, testNamespace, "vbmc list | tail -n +4 | head -n -1 | awk '{print $2}' | paste -s -d ' '", log)
+func getClusterNodeInfo(nodeName string, command []string, node *v1.Node, ctx context.Context) []string {
+	output, _ := farUtils.ExecCommandOnNode(k8sClient, command, node, ctx)
+	// output, _ := farUtils.RunCommandInCluster(clientSet, nodeName, testNamespace, command , log)
 	// if err != nil {
 	// 	return "", err
 	// }
 	res := strings.Split(output, " ")
-	log.Info("Cluster", "Node Names", res)
-	return res
-}
-
-func getClusterNodePorts(nodeName string) []string {
-	output, _ := farUtils.RunCommandInCluster(clientSet, nodeName, testNamespace, "vbmc list | tail -n +4 | head -n -1 | awk '{print $8}' | paste -s -d ' '", log)
-	// if err != nil {
-	// 	return "", err
-	// }
-
-	res := strings.Split(output, " ")
-	log.Info("Cluster", "Node Ports", res)
+	log.Info("Cluster", "Node Info", res)
 	return res
 }
