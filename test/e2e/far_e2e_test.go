@@ -60,8 +60,8 @@ var _ = Describe("FAR E2e", func() {
 	Context("fence agent - fence_ipmilan", func() {
 		var (
 			// kubeletReadyTimeBefore metav1.Time
-			far                   *v1alpha1.FenceAgentsRemediation
-			nodeBootTimeBefore    time.Time
+			far *v1alpha1.FenceAgentsRemediation
+			// nodeBootTimeBefore    time.Time
 			errBoot               error
 			testNodeName          string
 			nodeObj               v1.Node
