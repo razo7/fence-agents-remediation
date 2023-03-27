@@ -21,7 +21,7 @@ import (
 
 const (
 	fenceAgentDummyName = "echo"
-	testNamespace       = "openshift-operators"
+	testNamespace       = "fence-agents-remediation"
 	fenceAgentIPMI      = "fence_ipmilan"
 
 	// eventually parameters
