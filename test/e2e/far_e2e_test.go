@@ -21,7 +21,7 @@ import (
 
 const (
 	fenceAgentDummyName = "echo"
-	testNamespace       = "fence-agents-remediation"
+	// testNamespace       = "fence-agents-remediation"
 	fenceAgentIPMI      = "fence_ipmilan"
 
 	// eventually parameters
@@ -29,6 +29,7 @@ const (
 	timeoutReboot = 3 * time.Minute
 	pollInterval  = 10 * time.Second
 )
+var testNamespace string
 
 var _ = Describe("FAR E2e", func() {
 	var far *v1alpha1.FenceAgentsRemediation
@@ -94,6 +95,8 @@ var _ = Describe("FAR E2e", func() {
 			Expect(errBoot).ToNot(HaveOccurred(), "failed to get boot time of the node")
 
 			far = createFAR(testNodeName, fenceAgentIPMI, testShareParam, testNodeParam)
+			testNamespace = client.ObjectKeyFromObject(far).Namespace
+			log.Info("Running FAR", "namespace", testNamespace)
 		})
 
 		AfterEach(func() {
@@ -119,7 +122,7 @@ var _ = Describe("FAR E2e", func() {
 // createFAR assigns the input to FenceAgentsRemediation object, creates CR, and returns the CR object
 func createFAR(nodeName string, agent string, sharedParameters map[v1alpha1.ParameterName]string, nodeParameters map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string) *v1alpha1.FenceAgentsRemediation {
 	far := &v1alpha1.FenceAgentsRemediation{
-		ObjectMeta: metav1.ObjectMeta{Name: nodeName, Namespace: testNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 		Spec: v1alpha1.FenceAgentsRemediationSpec{
 			Agent:            agent,
 			SharedParameters: sharedParameters,
