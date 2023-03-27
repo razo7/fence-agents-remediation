@@ -47,7 +47,7 @@ func RunCommandInCluster(c *kubernetes.Clientset, nodeName string, ns string, co
 		return "", err
 	}
 
-	err = waitForCondition(c, pod, corev1.PodReady, corev1.ConditionTrue, time.Minute)
+	err = waitForCondition(c, pod, corev1.PodReady, corev1.ConditionTrue, 2*time.Minute)
 	if err != nil {
 		return "", err
 	}
