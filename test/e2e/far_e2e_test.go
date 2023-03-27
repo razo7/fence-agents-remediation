@@ -175,7 +175,7 @@ func wasNodeRebooted(nodeName string, nodeBootTimeBefore time.Time) {
 func checkFarLogs(logString string) {
 	var pod *corev1.Pod
 	EventuallyWithOffset(1, func() *corev1.Pod {
-		pod = getFenceAgentsPod(testNsName)
+		pod = getFenceAgentsPod("")
 		return pod
 	}, timeout, pollInterval).ShouldNot(BeNil(), "can't find the pod after timeout")
 
