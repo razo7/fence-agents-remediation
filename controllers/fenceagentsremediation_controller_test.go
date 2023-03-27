@@ -113,7 +113,7 @@ var _ = Describe("FAR Controller", func() {
 	})
 })
 
-// newFenceAgentsRemediation assign the input to the FenceAgentsRemediation's Spec
+// newFenceAgentsRemediation assign the input to the FenceAgentsRemediation
 func newFenceAgentsRemediation(nodeName string, agent string, sharedparameters map[v1alpha1.ParameterName]string, nodeparameters map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string) *v1alpha1.FenceAgentsRemediation {
 	return &v1alpha1.FenceAgentsRemediation{
 		ObjectMeta: metav1.ObjectMeta{Name: nodeName, Namespace: defaultNamespace},
@@ -128,7 +128,7 @@ func newFenceAgentsRemediation(nodeName string, agent string, sharedparameters m
 // buildFarPod builds a dummy pod with FAR label and namespace
 func buildFarPod() *corev1.Pod {
 	fenceAgentsPod := &corev1.Pod{}
-	fenceAgentsPod.Labels = faPodLabels
+	fenceAgentsPod.Labels = FaPodLabels
 	fenceAgentsPod.Name = "mock-fence-agents"
 	fenceAgentsPod.Namespace = defaultNamespace
 	container := corev1.Container{
