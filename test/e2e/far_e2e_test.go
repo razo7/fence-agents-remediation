@@ -25,9 +25,9 @@ const (
 	fenceAgentIPMI      = "fence_ipmilan"
 
 	// eventually parameters
-	timeout      = 2 * time.Minute
-	pollInterval = 10 * time.Second
-	offsetExpect = 1
+	timeout       = 2 * time.Minute
+	timeoutReboot = 3 * time.Minute
+	pollInterval  = 10 * time.Second
 )
 
 var _ = Describe("FAR E2e", func() {
@@ -72,7 +72,10 @@ var _ = Describe("FAR E2e", func() {
 		}
 
 		var (
-			testNodeName string
+			far                *v1alpha1.FenceAgentsRemediation
+			nodeBootTimeBefore time.Time
+			errBoot            error
+			testNodeName       string
 		)
 		nodes := &corev1.NodeList{}
 		BeforeEach(func() {
@@ -85,6 +88,10 @@ var _ = Describe("FAR E2e", func() {
 			nodeObj := nodes.Items[0]
 			testNodeName = nodeObj.Name
 			log.Info("Testing Node", "Node name", testNodeName)
+
+			// save the node's boot time prior to the fence agent call
+			nodeBootTimeBefore, errBoot = getNodeBootTime(testNodeName)
+			Expect(errBoot).ToNot(HaveOccurred(), "failed to get boot time of the node")
 
 			far = createFAR(testNodeName, fenceAgentIPMI, testShareParam, testNodeParam)
 		})
@@ -102,6 +109,8 @@ var _ = Describe("FAR E2e", func() {
 				By("checking the command has been executed successfully")
 				checkFarLogs(cli.SuccessCommandLog)
 
+				By("checking the node's boot time after running the FA")
+				wasNodeRebooted(testNodeName, nodeBootTimeBefore)
 			})
 		})
 	})
@@ -130,6 +139,32 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 		}
 		return err
 	}, 2*time.Minute, 10*time.Second).ShouldNot(HaveOccurred(), "failed to delete far")
+}
+
+// getNodeBootTime returns the bootime of node nodeName if possible, otherwise it returns an error
+func getNodeBootTime(nodeName string) (time.Time, error) {
+	bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNamespace, log)
+	if bootTime != nil && err == nil {
+		return *bootTime, nil
+	}
+	return time.Time{}, err
+}
+
+// wasNodeRebooted waits until there is a newer boot time than before, a reboot occurred, otherwise it falls with an error
+func wasNodeRebooted(nodeName string, nodeBootTimeBefore time.Time) {
+	log.Info("boot time", "node", nodeName, "old", nodeBootTimeBefore)
+	var nodeBootTimeAfter time.Time
+	Eventually(func() (time.Time, error) {
+		var errBootAfter error
+		nodeBootTimeAfter, errBootAfter = getNodeBootTime(nodeName)
+		if errBootAfter != nil {
+			log.Error(errBootAfter, "Can't get boot time of the node")
+		}
+		return nodeBootTimeAfter, errBootAfter
+	}, timeoutReboot, pollInterval).Should(
+		BeTemporally(">", nodeBootTimeBefore), "The node didn't finish a reboot after FAR CR has been created and timeout time has passed")
+
+	log.Info("successful reboot", "node", nodeName, "offset between boot times", nodeBootTimeAfter.Sub(nodeBootTimeBefore), "new boot time", nodeBootTimeAfter)
 }
 
 // checkFarLogs gets the FAR pod and checks whether it's logs have logString
