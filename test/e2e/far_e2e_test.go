@@ -20,8 +20,10 @@ import (
 )
 
 const (
+	// needs to match CI config (https://github.com/openshift/release/tree/master/ci-operator/config/medik8s/fence-agents-remediation)!
+	testNamespace = "far-install"
+
 	fenceAgentDummyName = "echo"
-	// testNamespace       = "fence-agents-remediation"
 	fenceAgentIPMI      = "fence_ipmilan"
 
 	// eventually parameters
@@ -29,7 +31,6 @@ const (
 	timeoutReboot = 3 * time.Minute
 	pollInterval  = 10 * time.Second
 )
-var testNamespace string
 
 var _ = Describe("FAR E2e", func() {
 	var far *v1alpha1.FenceAgentsRemediation
@@ -95,7 +96,6 @@ var _ = Describe("FAR E2e", func() {
 			Expect(errBoot).ToNot(HaveOccurred(), "failed to get boot time of the node")
 
 			far = createFAR(testNodeName, fenceAgentIPMI, testShareParam, testNodeParam)
-			testNamespace = client.ObjectKeyFromObject(far).Namespace
 			log.Info("Running FAR", "namespace", testNamespace)
 		})
 
