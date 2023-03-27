@@ -21,11 +21,10 @@ import (
 
 const (
 	fenceAgentDummyName = "echo"
-	testNamespace       = "openshift-operators"
 	fenceAgentIPMI      = "fence_ipmilan"
 
 	// eventually parameters
-	timeout       = 2 * time.Minute
+	timeoutLogs   = 1 * time.Minute
 	timeoutReboot = 3 * time.Minute
 	pollInterval  = 10 * time.Second
 )
@@ -119,7 +118,9 @@ var _ = Describe("FAR E2e", func() {
 // createFAR assigns the input to FenceAgentsRemediation object, creates CR, and returns the CR object
 func createFAR(nodeName string, agent string, sharedParameters map[v1alpha1.ParameterName]string, nodeParameters map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string) *v1alpha1.FenceAgentsRemediation {
 	far := &v1alpha1.FenceAgentsRemediation{
-		ObjectMeta: metav1.ObjectMeta{Name: nodeName, Namespace: testNamespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nodeName,
+		},
 		Spec: v1alpha1.FenceAgentsRemediationSpec{
 			Agent:            agent,
 			SharedParameters: sharedParameters,
@@ -143,7 +144,7 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 
 // getNodeBootTime returns the bootime of node nodeName if possible, otherwise it returns an error
 func getNodeBootTime(nodeName string) (time.Time, error) {
-	bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNamespace, log)
+	bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNsName, log)
 	if bootTime != nil && err == nil {
 		return *bootTime, nil
 	}
@@ -162,18 +163,18 @@ func wasNodeRebooted(nodeName string, nodeBootTimeBefore time.Time) {
 		}
 		return nodeBootTimeAfter, errBootAfter
 	}, timeoutReboot, pollInterval).Should(
-		BeTemporally(">", nodeBootTimeBefore), "The node didn't finish a reboot after FAR CR has been created and timeout time has passed")
+		BeTemporally(">", nodeBootTimeBefore), "Timeout for node reboot has passed, even though FAR CR has been created")
 
-	log.Info("successful reboot", "node", nodeName, "offset between boot times", nodeBootTimeAfter.Sub(nodeBootTimeBefore), "new boot time", nodeBootTimeAfter)
+	log.Info("successful reboot", "node", nodeName, "offset between last boot", nodeBootTimeAfter.Sub(nodeBootTimeBefore), "new boot time", nodeBootTimeAfter)
 }
 
 // checkFarLogs gets the FAR pod and checks whether it's logs have logString
 func checkFarLogs(logString string) {
 	var pod *corev1.Pod
 	EventuallyWithOffset(1, func() *corev1.Pod {
-		pod = getFenceAgentsPod(testNamespace)
+		pod = getFenceAgentsPod()
 		return pod
-	}, timeout, pollInterval).ShouldNot(BeNil(), "can't find the pod after timeout")
+	}, timeoutLogs, pollInterval).ShouldNot(BeNil(), "can't find the pod after timeout")
 
 	EventuallyWithOffset(1, func() string {
 		logs, err := farUtils.GetLogs(clientSet, pod, "manager")
@@ -182,17 +183,16 @@ func checkFarLogs(logString string) {
 			return ""
 		}
 		return logs
-	}, timeout/2, pollInterval).Should(ContainSubstring(logString))
+	}, timeoutLogs, pollInterval).Should(ContainSubstring(logString))
 }
 
 // getFenceAgentsPod fetches the FAR pod based on FAR's label and namespace
-func getFenceAgentsPod(namespace string) *corev1.Pod {
+func getFenceAgentsPod() *corev1.Pod {
 	pods := new(corev1.PodList)
 	podLabelsSelector, _ := metav1.LabelSelectorAsSelector(
 		&metav1.LabelSelector{MatchLabels: farController.FaPodLabels})
 	options := client.ListOptions{
 		LabelSelector: podLabelsSelector,
-		Namespace:     namespace,
 	}
 	if err := k8sClient.List(context.Background(), pods, &options); err != nil {
 		log.Error(err, "can't find the pod by it's labels")
