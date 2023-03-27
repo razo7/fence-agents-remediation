@@ -27,7 +27,7 @@ const (
 	fenceAgentIPMI      = "fence_ipmilan"
 
 	// eventually parameters
-	timeout       = 2 * time.Minute
+	timeoutLogs   = 1 * time.Minute
 	timeoutReboot = 3 * time.Minute
 	pollInterval  = 10 * time.Second
 )
@@ -96,8 +96,6 @@ var _ = Describe("FAR E2e", func() {
 			Expect(errBoot).ToNot(HaveOccurred(), "failed to get boot time of the node")
 
 			far = createFAR(testNodeName, fenceAgentIPMI, testShareParam, testNodeParam)
-			farNamespace := far.Namespace
-			log.Info("Running FAR", "test namespace", testNsName, "far namespace", farNamespace)
 		})
 
 		AfterEach(func() {
@@ -123,7 +121,9 @@ var _ = Describe("FAR E2e", func() {
 // createFAR assigns the input to FenceAgentsRemediation object, creates CR, and returns the CR object
 func createFAR(nodeName string, agent string, sharedParameters map[v1alpha1.ParameterName]string, nodeParameters map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string) *v1alpha1.FenceAgentsRemediation {
 	far := &v1alpha1.FenceAgentsRemediation{
-		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nodeName,
+		},
 		Spec: v1alpha1.FenceAgentsRemediationSpec{
 			Agent:            agent,
 			SharedParameters: sharedParameters,
@@ -175,9 +175,9 @@ func wasNodeRebooted(nodeName string, nodeBootTimeBefore time.Time) {
 func checkFarLogs(logString string) {
 	var pod *corev1.Pod
 	EventuallyWithOffset(1, func() *corev1.Pod {
-		pod = getFenceAgentsPod("")
+		pod = getFenceAgentsPod()
 		return pod
-	}, timeout, pollInterval).ShouldNot(BeNil(), "can't find the pod after timeout")
+	}, timeoutLogs, pollInterval).ShouldNot(BeNil(), "can't find the pod after timeout")
 
 	EventuallyWithOffset(1, func() string {
 		logs, err := farUtils.GetLogs(clientSet, pod, "manager")
@@ -186,17 +186,16 @@ func checkFarLogs(logString string) {
 			return ""
 		}
 		return logs
-	}, timeout/2, pollInterval).Should(ContainSubstring(logString))
+	}, timeoutLogs, pollInterval).Should(ContainSubstring(logString))
 }
 
 // getFenceAgentsPod fetches the FAR pod based on FAR's label and namespace
-func getFenceAgentsPod(namespace string) *corev1.Pod {
+func getFenceAgentsPod() *corev1.Pod {
 	pods := new(corev1.PodList)
 	podLabelsSelector, _ := metav1.LabelSelectorAsSelector(
 		&metav1.LabelSelector{MatchLabels: farController.FaPodLabels})
 	options := client.ListOptions{
 		LabelSelector: podLabelsSelector,
-		Namespace:     namespace,
 	}
 	if err := k8sClient.List(context.Background(), pods, &options); err != nil {
 		log.Error(err, "can't find the pod by it's labels")

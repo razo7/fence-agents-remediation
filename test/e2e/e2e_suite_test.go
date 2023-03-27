@@ -31,9 +31,6 @@ var (
 	clientSet *kubernetes.Clientset
 	k8sClient ctrl.Client
 
-	// The ns the operator is running in
-	operatorNsName string
-
 	// The ns test pods are started in
 	testNsName = "far-test"
 )
@@ -69,8 +66,6 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = ctrl.New(config, ctrl.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 
-	operatorNsName = os.Getenv("OPERATOR_NS")
-
 	// create test ns
 	testNs := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -78,11 +73,11 @@ var _ = BeforeSuite(func() {
 			Labels: map[string]string{
 				// allow privileged pods in test namespace, needed for API blocker pod
 				"pod-security.kubernetes.io/enforce":             "privileged",
-				"security.openshift.io/scc.podSecurityLabelSync": "false",
+				"security.openshift.io/scc.podSecurityLabelSync": "true",
 			},
 		},
 	}
-		err = k8sClient.Get(context.Background(), ctrl.ObjectKeyFromObject(testNs), testNs)
+	err = k8sClient.Get(context.Background(), ctrl.ObjectKeyFromObject(testNs), testNs)
 	if errors.IsNotFound(err) {
 		err = k8sClient.Create(context.Background(), testNs)
 	}
