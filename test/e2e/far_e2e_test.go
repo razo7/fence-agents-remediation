@@ -21,7 +21,7 @@ import (
 
 const (
 	// needs to match CI config (https://github.com/openshift/release/tree/master/ci-operator/config/medik8s/fence-agents-remediation)!
-	testNamespace = "far-install"
+	// testNamespace = "far-install"
 
 	fenceAgentDummyName = "echo"
 	fenceAgentIPMI      = "fence_ipmilan"
@@ -96,7 +96,8 @@ var _ = Describe("FAR E2e", func() {
 			Expect(errBoot).ToNot(HaveOccurred(), "failed to get boot time of the node")
 
 			far = createFAR(testNodeName, fenceAgentIPMI, testShareParam, testNodeParam)
-			log.Info("Running FAR", "namespace", testNamespace)
+			farNamespace := far.Namespace
+			log.Info("Running FAR", "test namespace", testNsName, "far namespace", farNamespace)
 		})
 
 		AfterEach(func() {
@@ -146,7 +147,7 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 
 // getNodeBootTime returns the bootime of node nodeName if possible, otherwise it returns an error
 func getNodeBootTime(nodeName string) (time.Time, error) {
-	bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNamespace, log)
+	bootTime, err := farUtils.GetBootTime(clientSet, nodeName, testNsName, log)
 	if bootTime != nil && err == nil {
 		return *bootTime, nil
 	}
@@ -174,7 +175,7 @@ func wasNodeRebooted(nodeName string, nodeBootTimeBefore time.Time) {
 func checkFarLogs(logString string) {
 	var pod *corev1.Pod
 	EventuallyWithOffset(1, func() *corev1.Pod {
-		pod = getFenceAgentsPod(testNamespace)
+		pod = getFenceAgentsPod(testNsName)
 		return pod
 	}, timeout, pollInterval).ShouldNot(BeNil(), "can't find the pod after timeout")
 
