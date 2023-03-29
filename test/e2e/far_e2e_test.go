@@ -30,7 +30,7 @@ const (
 
 var _ = Describe("FAR E2e", func() {
 	var far *v1alpha1.FenceAgentsRemediation
-	clusterPlatform, err := farUtils.GetClusterPlatform(configClient)
+	clusterPlatform, err := farUtils.GetClusterPlatform(&configClient)
 	if err != nil {
 		Fail("can't identify the cluster platform")
 	}

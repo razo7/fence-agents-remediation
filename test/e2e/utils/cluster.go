@@ -9,9 +9,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func GetClusterPlatform(c configclient.Interface) (string, error) {
+func GetClusterPlatform(config *configclient.Interface) (string, error) {
 	// oc get Infrastructure.config.openshift.io/cluster  -o jsonpath='{.spec.platformSpec.type}'
-
+	c := *config
 	clusterInfra, err := c.ConfigV1().Infrastructures().Get(context.Background(), "cluster", metav1.GetOptions{})
 	if err != nil {
 		return "", err
