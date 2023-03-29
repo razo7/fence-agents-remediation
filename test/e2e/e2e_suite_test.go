@@ -10,6 +10,9 @@ import (
 	. "github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/medik8s/fence-agents-remediation/api/v1alpha1"
+	configclient "github.com/openshift/client-go/config/clientset/versioned"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,16 +22,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/medik8s/fence-agents-remediation/api/v1alpha1"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 var (
-	log       logr.Logger
-	clientSet *kubernetes.Clientset
-	k8sClient ctrl.Client
+	log          logr.Logger
+	clientSet    *kubernetes.Clientset
+	k8sClient    ctrl.Client
+	configClient configclient.Interface
 
 	// The ns test pods are started in
 	testNsName = "far-test"
@@ -54,6 +56,11 @@ var _ = BeforeSuite(func() {
 	if err != nil {
 		Fail(fmt.Sprintf("Couldn't get kubeconfig %v", err))
 	}
+
+	configClient, err = configclient.NewForConfig(config)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(configClient).NotTo(BeNil())
+
 	clientSet, err = kubernetes.NewForConfig(config)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(clientSet).NotTo(BeNil())

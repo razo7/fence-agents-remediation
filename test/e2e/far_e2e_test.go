@@ -8,15 +8,14 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	corev1 "k8s.io/api/core/v1"
-	apiErrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	"github.com/medik8s/fence-agents-remediation/api/v1alpha1"
 	farController "github.com/medik8s/fence-agents-remediation/controllers"
 	"github.com/medik8s/fence-agents-remediation/pkg/cli"
 	farUtils "github.com/medik8s/fence-agents-remediation/test/e2e/utils"
+	corev1 "k8s.io/api/core/v1"
+	apiErrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -31,7 +30,11 @@ const (
 
 var _ = Describe("FAR E2e", func() {
 	var far *v1alpha1.FenceAgentsRemediation
-
+	clusterPlatform, err := farUtils.GetClusterPlatform(configClient)
+	if err != nil {
+		Fail("can't identify the cluster platform")
+	}
+	log.Info("Clustetr Platform", "clusterPlatform", clusterPlatform)
 	Context("fence agent - dummy", func() {
 		testNodeName := "dummy-node"
 
@@ -50,7 +53,6 @@ var _ = Describe("FAR E2e", func() {
 			Expect(k8sClient.Get(context.Background(), client.ObjectKeyFromObject(far), testFarCR)).To(Succeed(), "failed to get FAR CR")
 		})
 	})
-
 	Context("fence agent - fence_ipmilan", func() {
 		testShareParam := map[v1alpha1.ParameterName]string{
 			"--username": "admin",
