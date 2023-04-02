@@ -36,7 +36,7 @@ import (
 )
 
 var (
-	faPodLabels = map[string]string{"app": "fence-agents-remediation-operator"}
+	FaPodLabels = map[string]string{"app": "fence-agents-remediation-operator"}
 )
 
 // FenceAgentsRemediationReconciler reconciles a FenceAgentsRemediation object
@@ -94,7 +94,7 @@ func (r *FenceAgentsRemediationReconciler) Reconcile(ctx context.Context, req ct
 	}
 	//TODO: Check that FA is excutable? run cli.IsExecuteable
 
-	r.Log.Info("Create and execute the fence agent", "Fence Agent", far.Spec.Agent)
+	r.Log.Info("Create and execute the fence agent", "Fence Agent", far.Spec.Agent, "Node Name", req.Name)
 	faParams, err := buildFenceAgentParams(far)
 	if err != nil {
 		return emptyResult, err
@@ -115,7 +115,7 @@ func (r *FenceAgentsRemediationReconciler) getFenceAgentsPod(namespace string) (
 	pods := new(corev1.PodList)
 
 	podLabelsSelector, _ := metav1.LabelSelectorAsSelector(
-		&metav1.LabelSelector{MatchLabels: faPodLabels})
+		&metav1.LabelSelector{MatchLabels: FaPodLabels})
 	options := client.ListOptions{
 		LabelSelector: podLabelsSelector,
 		Namespace:     namespace,
