@@ -203,6 +203,7 @@ func buildNodeParameters(clusterPlatformType string) (map[v1alpha1.ParameterName
 		nodeIdentifier = v1alpha1.ParameterName("--plug")
 
 	} else if clusterPlatformType == "BareMetal" {
+		nodeListParam, err = farUtils.GetAWSNodeInfoList(machineClient)
 		nodeListParam, err = farUtils.GetBMNodeInfoList(machineClient)
 		if err != nil {
 			// Fail("can't get nodes' information- AWS instance ID")
