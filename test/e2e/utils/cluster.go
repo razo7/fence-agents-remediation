@@ -62,8 +62,7 @@ func GetAWSNodeInfoList(machineClient *machineclient.MachineV1beta1Client) (map[
 	//  oc get machine -n openshift-machine-api MACHINE_NAME -o jsonpath='{.spec.providerID}'
 	//  oc get machine -n openshift-machine-api MACHINE_NAME -o jsonpath='{.status.nodeRef.name}'
 
-	var nodeList map[v1alpha1.NodeName]string
-
+	nodeList := make(map[v1alpha1.NodeName]string)
 	// Get the list of Machines in the openshift-machine-api namespace
 	machineList, err := machineClient.Machines("openshift-machine-api").List(context.Background(), metav1.ListOptions{})
 	if err != nil {
