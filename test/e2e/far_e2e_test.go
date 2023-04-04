@@ -24,6 +24,7 @@ const (
 	fenceAgentDummyName = "echo"
 	fenceAgentAWS       = "fence_aws"
 	fenceAgentIPMI      = "fence_ipmilan"
+	nodeIndex = 0
 
 	// eventually parameters
 	timeoutLogs  = 1 * time.Minute
@@ -102,7 +103,7 @@ var _ = Describe("FAR E2e", func() {
 			}
 			//TODO: Randomize the node selection
 			// run FA on the first node - a master node
-			nodeObj := nodes.Items[0]
+			nodeObj := nodes.Items[nodeIndex]
 			testNodeName = nodeObj.Name
 			log.Info("Testing Node", "Node name", testNodeName)
 
@@ -137,6 +138,7 @@ func buildSharedParameters(clusterPlatform *v1.Infrastructure, action string) (m
 		secretValAWS      = "aws_secret_access_key"
 
 		// BareMetal
+		//TODO: secret BM should be based on node name - > oc get bmh -n openshift-machine-api BM_NAME -o jsonpath='{.spec.bmc.credentialsName}'
 		secretBMExample = "ostest-master-0-bmc-secret"
 		secretKeyBM     = "username"
 		secretValBM     = "password"
@@ -167,6 +169,8 @@ func buildSharedParameters(clusterPlatform *v1.Infrastructure, action string) (m
 
 	} else if clusterPlatformType == "BareMetal" {
 		// TODO : get ip from GetCredientals
+		// command -> oc get bmh -n openshift-machine-api ostest-master-0 -o jsonpath='{.spec.bmc.address}'
+		// then parse ip
 		username, password, err := farUtils.GetCredientals(clientSet, clusterPlatformType, secretBMExample, secretKeyBM, secretValBM)
 		if err != nil {
 			// Fail("can't get AWS credentials")

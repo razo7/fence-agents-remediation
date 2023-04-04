@@ -66,16 +66,6 @@ func GetAWSNodeInfoList(machineClient *machineclient.MachineV1beta1Client) (map[
 
 	// Get the list of Machines in the openshift-machine-api namespace
 	machineList, err := machineClient.Machines("openshift-machine-api").List(context.Background(), metav1.ListOptions{})
-	// machineList := &v1alpha3.MachineList{}
-	// err = c.List(context.TODO(), machineList)
-	// if err != nil {
-	//     if errors.IsNotFound(err) {
-	//         fmt.Println("No machines found in the cluster.")
-	//     } else {
-	//         fmt.Fprintf(os.Stderr, "Failed to list machines in the cluster: %v\n", err)
-	//         os.Exit(1)
-	//     }
-	// }
 	if err != nil {
 		return nodeList, err
 	}
@@ -84,17 +74,16 @@ func GetAWSNodeInfoList(machineClient *machineclient.MachineV1beta1Client) (map[
 	for _, machine := range machineList.Items {
 		nodeName := v1alpha1.NodeName(string(machine.Status.NodeRef.Name))
 		fmt.Printf("node: %s Instance ID: %s \n", nodeName, string(*machine.Spec.ProviderID))
-		// nodeList[nodeName] = string(*machine.Spec.ProviderID)
+		nodeList[nodeName] = string(*machine.Spec.ProviderID)
 	}
 	return nodeList, nil
 }
 
 // GetNodeInfoList returns a list of the node names and their identification, e.g., AWS instance ID
 func GetBMNodeInfoList(machineClient *machineclient.MachineV1beta1Client) (map[v1alpha1.NodeName]string, error) {
-	//  oc get machine -n openshift-machine-api MACHINE_NAME -o jsonpath='{.spec.providerID}'
-	//  oc get machine -n openshift-machine-api MACHINE_NAME -o jsonpath='{.status.nodeRef.name}'
 
 	//TODO: seacrch for BM and fetch ports
+	
 	nodeList := map[v1alpha1.NodeName]string{
 		"master-0": "6230",
 		"master-1": "6231",
