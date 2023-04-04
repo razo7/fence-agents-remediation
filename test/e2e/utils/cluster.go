@@ -4,8 +4,8 @@ package utils
 
 import (
 	"context"
+	"fmt"
 
-	b64 "encoding/base64"
 	// "encoding/json"
 
 	"github.com/medik8s/fence-agents-remediation/api/v1alpha1"
@@ -18,15 +18,18 @@ import (
 
 const (
 	machineNamespace = "openshift-machine-api"
-	secretAWS        = "aws-cloud-credentials"
 )
 
 // GetClusterInfo fetch the cluster's infrastructure object to identify it's type
-func GetClusterInfo(config *configclient.Interface) (*v1.Infrastructure, error) {
+func GetClusterInfo(config configclient.Interface) (*v1.Infrastructure, error) {
 	// oc get Infrastructure.config.openshift.io/cluster
 
-	c := *config
-	clusterInfra, err := c.ConfigV1().Infrastructures().Get(context.Background(), "cluster", metav1.GetOptions{})
+	// clusterList, _ := config.ConfigV1().Infrastructures().List(context.Background(), metav1.ListOptions{})
+	// for _, cluster := range clusterList.Items {
+	// 	fmt.Printf("\ncluster name:%s and PlatformType: %s \n", string(cluster.Name), string(cluster.Status.PlatformStatus.Type))
+	// }
+
+	clusterInfra, err := config.ConfigV1().Infrastructures().Get(context.Background(), "cluster", metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -34,28 +37,28 @@ func GetClusterInfo(config *configclient.Interface) (*v1.Infrastructure, error) 
 }
 
 // GetAWSCredientals searches for AWS secret, and then returns it decoded
-func GetAWSCredientals(clientSet *kubernetes.Clientset) (string, string, error) {
+func GetCredientals(clientSet *kubernetes.Clientset, clusterPlatformType, secretName, secretKey, secretVal string) (string, string, error) {
 	// oc get secrets -n openshift-machine-api aws-cloud-credentials -o jsonpath='{.data.aws_access_key_id}' | base64 -d
 	// oc get secrets -n openshift-machine-api aws-cloud-credentials -o jsonpath='{.data.aws_secret_access_key}' | base64 -d
 
-	awsSecret, err := clientSet.CoreV1().Secrets(machineNamespace).Get(context.Background(), secretAWS, metav1.GetOptions{})
+	secret, err := clientSet.CoreV1().Secrets(machineNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
 	if err != nil {
 		return "", "", err
 	}
-	keyID := b64.StdEncoding.EncodeToString([]byte(awsSecret.Data["aws_access_key_id"]))
-	keySecret := b64.StdEncoding.EncodeToString([]byte(awsSecret.Data["aws_secret_access_key"]))
-	// // Parse the AWS credentials - AWS access key and secret key
+	fmt.Printf("Key: %s Value: %s \n", secret.Data[secretKey], secret.Data[secretVal])
+	// Parse the AWS credentials - AWS access key and secret key
 	// var credentials v1beta1credential.OpenShiftCredentialProvider
 	// err = json.Unmarshal(awsSecret.Data["credentials"], &credentials)
 	// if err != nil {
 	// 	return "","", err
 	// }
 	// return credentials.Spec.SecretRef.KeyValues["access_key_id"], credentials.Spec.SecretRef.KeyValues["secret_access_key"], nil
-	return keyID, keySecret, nil
+	// return keyID, keySecret, nil
+	return string(secret.Data[secretKey]), string(secret.Data[secretVal]), nil
 }
 
-// GetNodeInfoList returns a list of the node names and their identification, e.g., AWS instance ID
-func GetNodeInfoList(machineClient *machineclient.MachineV1beta1Client) (map[v1alpha1.NodeName]string, error) {
+// GetAWSNodeInfoList returns a list of the node names and their identification, e.g., AWS instance ID
+func GetAWSNodeInfoList(machineClient *machineclient.MachineV1beta1Client) (map[v1alpha1.NodeName]string, error) {
 	//  oc get machine -n openshift-machine-api MACHINE_NAME -o jsonpath='{.spec.providerID}'
 	//  oc get machine -n openshift-machine-api MACHINE_NAME -o jsonpath='{.status.nodeRef.name}'
 
@@ -63,6 +66,16 @@ func GetNodeInfoList(machineClient *machineclient.MachineV1beta1Client) (map[v1a
 
 	// Get the list of Machines in the openshift-machine-api namespace
 	machineList, err := machineClient.Machines("openshift-machine-api").List(context.Background(), metav1.ListOptions{})
+	// machineList := &v1alpha3.MachineList{}
+	// err = c.List(context.TODO(), machineList)
+	// if err != nil {
+	//     if errors.IsNotFound(err) {
+	//         fmt.Println("No machines found in the cluster.")
+	//     } else {
+	//         fmt.Fprintf(os.Stderr, "Failed to list machines in the cluster: %v\n", err)
+	//         os.Exit(1)
+	//     }
+	// }
 	if err != nil {
 		return nodeList, err
 	}
@@ -70,7 +83,36 @@ func GetNodeInfoList(machineClient *machineclient.MachineV1beta1Client) (map[v1a
 	// creates map for nodeName and AWS instance ID
 	for _, machine := range machineList.Items {
 		nodeName := v1alpha1.NodeName(string(machine.Status.NodeRef.Name))
-		nodeList[nodeName] = string(*machine.Spec.ProviderID)
+		fmt.Printf("node: %s Instance ID: %s \n", nodeName, string(*machine.Spec.ProviderID))
+		// nodeList[nodeName] = string(*machine.Spec.ProviderID)
 	}
 	return nodeList, nil
 }
+
+// GetNodeInfoList returns a list of the node names and their identification, e.g., AWS instance ID
+func GetBMNodeInfoList(machineClient *machineclient.MachineV1beta1Client) (map[v1alpha1.NodeName]string, error) {
+	//  oc get machine -n openshift-machine-api MACHINE_NAME -o jsonpath='{.spec.providerID}'
+	//  oc get machine -n openshift-machine-api MACHINE_NAME -o jsonpath='{.status.nodeRef.name}'
+
+	//TODO: seacrch for BM and fetch ports
+	nodeList := map[v1alpha1.NodeName]string{
+		"master-0": "6230",
+		"master-1": "6231",
+		"master-2": "6232",
+		"worker-0": "6233",
+		"worker-1": "6234",
+		"worker-2": "6235",
+	}
+	// testNodeParam = map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string{
+	// 	"--ipport": {
+	// 		"master-0": "6230",
+	// 		"master-1": "6231",
+	// 		"master-2": "6232",
+	// 		"worker-0": "6233",
+	// 		"worker-1": "6234",
+	// 		"worker-2": "6235",
+	// 	},
+	// }
+	return nodeList, nil
+}
+	
