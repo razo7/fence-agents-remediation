@@ -28,8 +28,8 @@ const (
 	nodeIdentifierPrefixAWS  = "--plug"
 	nodeIdentifierPrefixIPMI = "--ipport"
 	nodeIndex                = 3
-	succeesStatusMessage     = "\"Status: ON\n\""
-	succeesRebootMessage     = "\"Success: Rebooted\n\""
+	succeesStatusMessage     = "\"Status: ON\\n\""
+	succeesRebootMessage     = "\"Success: Rebooted\\n\""
 	containerName            = "manager"
 
 	// eventually parameters
