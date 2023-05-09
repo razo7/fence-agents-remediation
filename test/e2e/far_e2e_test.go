@@ -266,14 +266,14 @@ func getNodeBootTime(nodeName string) (time.Time, error) {
 
 // buildExpectedLogOutput
 func buildExpectedLogOutput(clusterPlatformType configv1.PlatformType, nodeIdentifierPrefix, testNodeID string) string {
-	// Example -> "--plug=i-04172bb40a6a83804"], "stdout": "Status: ON\n" OR
+	// Example -> "--plug=i-04172bb40a6a83804"], "stdout": "Status: ON\n" OR  "--ipport=6230"], "stdout": "Success: Rebooted\n"
 	var expectedString string
 	if fenceAgentAction == "status" {
 		expectedString = succeesStatusMessage
 	} else if fenceAgentAction == "reboot" {
 		expectedString = succeesRebootMessage
 	}
-	expectedString = nodeIdentifierPrefix + testNodeID + "\"], \"stdout\": " + expectedString
+	expectedString = nodeIdentifierPrefix + "=" + testNodeID + "\"], \"standard output\": " + expectedString
 	log.Info("String has been created", "expectedString", expectedString)
 	return expectedString
 
