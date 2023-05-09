@@ -29,7 +29,7 @@ const (
 	nodeIdentifierPrefixIPMI = "--ipport"
 	nodeIndex                = 3
 	succeesStatusMessage     = "\"Status: ON\n\""
-	succeesRebootMessage     = "\"Success: Rebooted\""
+	succeesRebootMessage     = "\"Success: Rebooted\n\""
 	containerName            = "manager"
 
 	// eventually parameters
