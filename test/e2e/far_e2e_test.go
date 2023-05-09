@@ -21,17 +21,21 @@ import (
 )
 
 const (
-	fenceAgentDummyName  = "echo"
-	fenceAgentAWS        = "fence_aws"
-	fenceAgentIPMI       = "fence_ipmilan"
-	fenceAgentAction     = "status"
-	nodeIndex            = 0
-	succeesStatusMessage = "ON"
-	containerName        = "manager"
+	fenceAgentDummyName      = "echo"
+	fenceAgentAWS            = "fence_aws"
+	fenceAgentIPMI           = "fence_ipmilan"
+	fenceAgentAction         = "reboot"
+	nodeIdentifierPrefixAWS  = "--plug"
+	nodeIdentifierPrefixIPMI = "--ipport"
+	nodeIndex                = 0
+	succeesStatusMessage     = "\"Status: ON\n\""
+	succeesRebootMessage     = "\"Success: Rebooted\""
+	containerName            = "manager"
 
 	// eventually parameters
-	timeoutLogs  = 1 * time.Minute
-	pollInterval = 10 * time.Second
+	timeoutLogs   = 1 * time.Minute
+	timeoutReboot = 3 * time.Minute
+	pollInterval  = 10 * time.Second
 )
 
 var _ = Describe("FAR E2e", func() {
@@ -69,9 +73,15 @@ var _ = Describe("FAR E2e", func() {
 		})
 	})
 
-	Context("fence agent - non-Dummy", func() {
+	Context("fence agent - fence_aws or fence_ipmilan", func() {
+		var (
+			nodeBootTimeBefore   time.Time
+			errBoot              error
+			testNodeName         string
+			nodeIdentifierPrefix string
+			testNodeID           string
+		)
 		BeforeEach(func() {
-			var testNodeName string
 			nodes := &corev1.NodeList{}
 			Expect(k8sClient.List(context.Background(), nodes, &client.ListOptions{})).ToNot(HaveOccurred())
 			if len(nodes.Items) <= 1 {
@@ -81,14 +91,15 @@ var _ = Describe("FAR E2e", func() {
 			// run FA on the first node - a master node
 			nodeObj := nodes.Items[nodeIndex]
 			testNodeName = nodeObj.Name
-			log.Info("Testing Node", "Node name", testNodeName)
 
 			switch clusterPlatform.Status.PlatformStatus.Type {
 			case configv1.AWSPlatformType:
 				fenceAgent = fenceAgentAWS
+				nodeIdentifierPrefix = nodeIdentifierPrefixAWS
 				By("running fence_aws")
 			case configv1.BareMetalPlatformType:
 				fenceAgent = fenceAgentIPMI
+				nodeIdentifierPrefix = nodeIdentifierPrefixIPMI
 				By("running fence_ipmilan")
 			default:
 				Skip("FAR haven't been tested on this kind of cluster (non AWS or BareMetal)")
@@ -102,6 +113,14 @@ var _ = Describe("FAR E2e", func() {
 			if err != nil {
 				Fail("can't get node information")
 			}
+			nodeName := v1alpha1.NodeName(testNodeName)
+			parameterName := v1alpha1.ParameterName(nodeIdentifierPrefix)
+			testNodeID = testNodeParam[parameterName][nodeName]
+			log.Info("Testing Node", "Node name", testNodeName, "Node ID", testNodeID)
+
+			// save the node's boot time prior to the fence agent call
+			nodeBootTimeBefore, errBoot = getNodeBootTime(testNodeName)
+			Expect(errBoot).ToNot(HaveOccurred(), "failed to get boot time of the node")
 
 			far = createFAR(testNodeName, fenceAgent, testShareParam, testNodeParam)
 		})
@@ -117,7 +136,11 @@ var _ = Describe("FAR E2e", func() {
 				Expect(k8sClient.Get(context.Background(), client.ObjectKeyFromObject(far), testFarCR)).To(Succeed(), "failed to get FAR CR")
 
 				By("checking the command has been executed successfully")
-				checkFarLogs(succeesStatusMessage)
+				expectedLog := buildExpectedLogOutput(clusterPlatform.Status.PlatformStatus.Type, nodeIdentifierPrefix, testNodeID)
+				checkFarLogs(expectedLog)
+
+				By("checking the node's boot time after running the FA")
+				wasNodeRebooted(testNodeName, nodeBootTimeBefore)
 			})
 		})
 	})
@@ -218,7 +241,7 @@ func buildNodeParameters(clusterPlatformType configv1.PlatformType) (map[v1alpha
 			fmt.Printf("can't get nodes' information - AWS instance ID\n")
 			return nil, err
 		}
-		nodeIdentifier = v1alpha1.ParameterName("--plug")
+		nodeIdentifier = v1alpha1.ParameterName(nodeIdentifierPrefixAWS)
 
 	} else if clusterPlatformType == configv1.BareMetalPlatformType {
 		nodeListParam, err = farE2eUtils.GetBMHNodeInfoList(machineClient)
@@ -226,10 +249,34 @@ func buildNodeParameters(clusterPlatformType configv1.PlatformType) (map[v1alpha
 			fmt.Printf("can't get nodes' information - ports\n")
 			return nil, err
 		}
-		nodeIdentifier = v1alpha1.ParameterName("--ipport")
+		nodeIdentifier = v1alpha1.ParameterName(nodeIdentifierPrefixIPMI)
 	}
 	testNodeParam = map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string{nodeIdentifier: nodeListParam}
 	return testNodeParam, nil
+}
+
+// getNodeBootTime returns the bootime of node nodeName if possible, otherwise it returns an error
+func getNodeBootTime(nodeName string) (time.Time, error) {
+	bootTime, err := farE2eUtils.GetBootTime(clientSet, nodeName, testNsName, log)
+	if bootTime != nil && err == nil {
+		return *bootTime, nil
+	}
+	return time.Time{}, err
+}
+
+// buildExpectedLogOutput
+func buildExpectedLogOutput(clusterPlatformType configv1.PlatformType, nodeIdentifierPrefix, testNodeID string) string {
+	// Example -> "--plug=i-04172bb40a6a83804"], "stdout": "Status: ON\n" OR
+	var expectedString string
+	if fenceAgentAction == "status" {
+		expectedString = succeesStatusMessage
+	} else if fenceAgentAction == "reboot" {
+		expectedString = succeesRebootMessage
+	}
+	expectedString = nodeIdentifierPrefix + testNodeID + "\"], \"stdout\": " + expectedString
+	log.Info("String has been created", "expectedString", expectedString)
+	return expectedString
+
 }
 
 // checkFarLogs gets the FAR pod and checks whether it's logs have logString
@@ -253,4 +300,21 @@ func checkFarLogs(logString string) {
 		}
 		return logs
 	}, timeoutLogs, pollInterval).Should(ContainSubstring(logString))
+}
+
+// wasNodeRebooted waits until there is a newer boot time than before, a reboot occurred, otherwise it falls with an error
+func wasNodeRebooted(nodeName string, nodeBootTimeBefore time.Time) {
+	log.Info("boot time", "node", nodeName, "old", nodeBootTimeBefore)
+	var nodeBootTimeAfter time.Time
+	Eventually(func() (time.Time, error) {
+		var errBootAfter error
+		nodeBootTimeAfter, errBootAfter = getNodeBootTime(nodeName)
+		if errBootAfter != nil {
+			log.Error(errBootAfter, "Can't get boot time of the node")
+		}
+		return nodeBootTimeAfter, errBootAfter
+	}, timeoutReboot, pollInterval).Should(
+		BeTemporally(">", nodeBootTimeBefore), "Timeout for node reboot has passed, even though FAR CR has been created")
+
+	log.Info("successful reboot", "node", nodeName, "offset between last boot", nodeBootTimeAfter.Sub(nodeBootTimeBefore), "new boot time", nodeBootTimeAfter)
 }

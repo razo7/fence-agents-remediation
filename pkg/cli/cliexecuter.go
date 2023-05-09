@@ -91,7 +91,7 @@ func (e executer) Execute(pod *corev1.Pod, command []string) (stdout string, std
 	if err != nil {
 		e.log.Error(err, "Failed to run exec command", "command", command, "stdout", stdoutBuf.String(), "stderr", stderrBuf.String())
 	} else {
-		e.log.Info("Command has been executed successfully", "command", command, "standard output", stdoutBuf.String())
+		e.log.Info("Command has been executed successfully", "command", command, "stdout", stdoutBuf.String())
 	}
 	return stdoutBuf.String(), stderrBuf.String(), err
 }
