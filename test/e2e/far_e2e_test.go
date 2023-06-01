@@ -24,9 +24,12 @@ const (
 	fenceAgentDummyName      = "echo"
 	fenceAgentAWS            = "fence_aws"
 	fenceAgentIPMI           = "fence_ipmilan"
-	fenceAgentAction     = "status"
-	nodeIndex            = 0
-	succeesStatusMessage = "ON"
+	fenceAgentAction         = "reboot"
+	nodeIdentifierPrefixAWS  = "--plug"
+	nodeIdentifierPrefixIPMI = "--ipport"
+	nodeIndex                = 3
+	succeesStatusMessage     = "\"Status: ON"
+	succeesRebootMessage     = "\"Success: Rebooted"
 	containerName            = "manager"
 
 	// eventually parameters
@@ -72,6 +75,8 @@ var _ = Describe("FAR E2e", func() {
 			nodeBootTimeBefore   time.Time
 			errBoot              error
 			testNodeName         string
+			nodeIdentifierPrefix string
+			testNodeID           string
 		)
 		BeforeEach(func() {
 			nodes := &corev1.NodeList{}
@@ -80,17 +85,18 @@ var _ = Describe("FAR E2e", func() {
 				Fail("there is one or less available nodes in the cluster")
 			}
 			//TODO: Randomize the node selection
-			// run FA on the first node - a master node
+			// run FA on the fourth node - a worker node
 			nodeObj := nodes.Items[nodeIndex]
 			testNodeName = nodeObj.Name
-			log.Info("Testing Node", "Node name", testNodeName)
 
 			switch clusterPlatform.Status.PlatformStatus.Type {
 			case configv1.AWSPlatformType:
 				fenceAgent = fenceAgentAWS
+				nodeIdentifierPrefix = nodeIdentifierPrefixAWS
 				By("running fence_aws")
 			case configv1.BareMetalPlatformType:
 				fenceAgent = fenceAgentIPMI
+				nodeIdentifierPrefix = nodeIdentifierPrefixIPMI
 				By("running fence_ipmilan")
 			default:
 				Skip("FAR haven't been tested on this kind of cluster (non AWS or BareMetal)")
@@ -104,6 +110,11 @@ var _ = Describe("FAR E2e", func() {
 			if err != nil {
 				Fail("can't get node information")
 			}
+			nodeName := v1alpha1.NodeName(testNodeName)
+			parameterName := v1alpha1.ParameterName(nodeIdentifierPrefix)
+			testNodeID = testNodeParam[parameterName][nodeName]
+			log.Info("Testing Node", "Node name", testNodeName, "Node ID", testNodeID)
+
 			// save the node's boot time prior to the fence agent call
 			nodeBootTimeBefore, errBoot = getNodeBootTime(testNodeName)
 			Expect(errBoot).ToNot(HaveOccurred(), "failed to get boot time of the node")
@@ -119,7 +130,8 @@ var _ = Describe("FAR E2e", func() {
 				Expect(k8sClient.Get(context.Background(), client.ObjectKeyFromObject(far), testFarCR)).To(Succeed(), "failed to get FAR CR")
 
 				By("checking the command has been executed successfully")
-				checkFarLogs(succeesStatusMessage)
+				expectedLog := buildExpectedLogOutput(clusterPlatform.Status.PlatformStatus.Type, nodeIdentifierPrefix, testNodeID)
+				checkFarLogs(expectedLog)
 
 				By("checking the node's boot time after running the FA")
 				wasNodeRebooted(testNodeName, nodeBootTimeBefore)
@@ -223,7 +235,7 @@ func buildNodeParameters(clusterPlatformType configv1.PlatformType) (map[v1alpha
 			fmt.Printf("can't get nodes' information - AWS instance ID\n")
 			return nil, err
 		}
-		nodeIdentifier = v1alpha1.ParameterName("--plug")
+		nodeIdentifier = v1alpha1.ParameterName(nodeIdentifierPrefixAWS)
 
 	} else if clusterPlatformType == configv1.BareMetalPlatformType {
 		nodeListParam, err = farE2eUtils.GetBMHNodeInfoList(machineClient)
@@ -231,7 +243,7 @@ func buildNodeParameters(clusterPlatformType configv1.PlatformType) (map[v1alpha
 			fmt.Printf("can't get nodes' information - ports\n")
 			return nil, err
 		}
-		nodeIdentifier = v1alpha1.ParameterName("--ipport")
+		nodeIdentifier = v1alpha1.ParameterName(nodeIdentifierPrefixIPMI)
 	}
 	testNodeParam = map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string{nodeIdentifier: nodeListParam}
 	return testNodeParam, nil
@@ -244,6 +256,20 @@ func getNodeBootTime(nodeName string) (time.Time, error) {
 		return *bootTime, nil
 	}
 	return time.Time{}, err
+}
+
+// buildExpectedLogOutput returns a string with a node identifier and a success message for the status/reboot action
+func buildExpectedLogOutput(clusterPlatformType configv1.PlatformType, nodeIdentifierPrefix, testNodeID string) string {
+	// Example -> "--plug=i-04172bb40a6a83804"], "stdout": "Status: ON" OR "--ipport=6230"], "stdout": "Success: Rebooted"
+	var expectedString string
+	if fenceAgentAction == "status" {
+		expectedString = succeesStatusMessage
+	} else if fenceAgentAction == "reboot" {
+		expectedString = succeesRebootMessage
+	}
+	expectedString = nodeIdentifierPrefix + "=" + testNodeID + "\"], \"stdout\": " + expectedString
+	log.Info("Substring to search in the logs", "expectedString", expectedString)
+	return expectedString
 }
 
 // checkFarLogs gets the FAR pod and checks whether it's logs have logString
