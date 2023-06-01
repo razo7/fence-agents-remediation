@@ -1,0 +1,2 @@
+resources:
+- install/fence_aws_credentials-request.yaml

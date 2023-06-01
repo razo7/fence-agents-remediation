@@ -252,6 +252,10 @@ bundle-community: ## Update displayName field in the bundle's CSV
 	sed -r -i "s|displayName: Fence Agents Remediation Operator|displayName: Fence Agents Remediation Operator - Community Edition|;" ${BUNDLE_CSV}
 	$(MAKE) bundle-update
 
+.PHONY: bundle-ocp-aws
+bundle-ocp-aws: kustomize ## Add CredentialsRequest
+	$(KUSTOMIZE) build config/ocp_aws | $(KUBECTL) apply -f -
+
 ##@ Build Dependencies
 
 ## Location to install dependencies to
