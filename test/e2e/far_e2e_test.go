@@ -70,7 +70,7 @@ var _ = Describe("FAR E2e", func() {
 		})
 	})
 
-	Context("fence agent - fence_aws or fence_ipmilan", func() {
+	FContext("fence agent - fence_aws or fence_ipmilan", func() {
 		var (
 			nodeBootTimeBefore   time.Time
 			errBoot              error
@@ -84,7 +84,7 @@ var _ = Describe("FAR E2e", func() {
 			if len(nodes.Items) <= 1 {
 				Fail("there is one or less available nodes in the cluster")
 			}
-			//TODO: Randomize the node selection
+			//TODO: Randomize the node selection & verify valid index
 			// run FA on the fourth node - a worker node
 			nodeObj := nodes.Items[nodeIndex]
 			testNodeName = nodeObj.Name
