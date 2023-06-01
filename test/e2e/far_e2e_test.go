@@ -21,17 +21,18 @@ import (
 )
 
 const (
-	fenceAgentDummyName  = "echo"
-	fenceAgentAWS        = "fence_aws"
-	fenceAgentIPMI       = "fence_ipmilan"
+	fenceAgentDummyName      = "echo"
+	fenceAgentAWS            = "fence_aws"
+	fenceAgentIPMI           = "fence_ipmilan"
 	fenceAgentAction     = "status"
 	nodeIndex            = 0
 	succeesStatusMessage = "ON"
-	containerName        = "manager"
+	containerName            = "manager"
 
 	// eventually parameters
-	timeoutLogs  = 1 * time.Minute
-	pollInterval = 10 * time.Second
+	timeoutLogs   = 1 * time.Minute
+	timeoutReboot = 10 * time.Minute
+	pollInterval  = 10 * time.Second
 )
 
 var _ = Describe("FAR E2e", func() {
@@ -57,10 +58,7 @@ var _ = Describe("FAR E2e", func() {
 			testShareParam := map[v1alpha1.ParameterName]string{}
 			testNodeParam := map[v1alpha1.ParameterName]map[v1alpha1.NodeName]string{}
 			far = createFAR(testNodeName, fenceAgent, testShareParam, testNodeParam)
-		})
-
-		AfterEach(func() {
-			deleteFAR(far)
+			DeferCleanup(deleteFAR, far)
 		})
 
 		It("should check whether the CR has been created", func() {
@@ -69,9 +67,13 @@ var _ = Describe("FAR E2e", func() {
 		})
 	})
 
-	Context("fence agent - non-Dummy", func() {
+	Context("fence agent - fence_aws or fence_ipmilan", func() {
+		var (
+			nodeBootTimeBefore   time.Time
+			errBoot              error
+			testNodeName         string
+		)
 		BeforeEach(func() {
-			var testNodeName string
 			nodes := &corev1.NodeList{}
 			Expect(k8sClient.List(context.Background(), nodes, &client.ListOptions{})).ToNot(HaveOccurred())
 			if len(nodes.Items) <= 1 {
@@ -102,12 +104,12 @@ var _ = Describe("FAR E2e", func() {
 			if err != nil {
 				Fail("can't get node information")
 			}
+			// save the node's boot time prior to the fence agent call
+			nodeBootTimeBefore, errBoot = getNodeBootTime(testNodeName)
+			Expect(errBoot).ToNot(HaveOccurred(), "failed to get boot time of the node")
 
 			far = createFAR(testNodeName, fenceAgent, testShareParam, testNodeParam)
-		})
-
-		AfterEach(func() {
-			deleteFAR(far)
+			DeferCleanup(deleteFAR, far)
 		})
 
 		When("running FAR to reboot node ", func() {
@@ -118,6 +120,9 @@ var _ = Describe("FAR E2e", func() {
 
 				By("checking the command has been executed successfully")
 				checkFarLogs(succeesStatusMessage)
+
+				By("checking the node's boot time after running the FA")
+				wasNodeRebooted(testNodeName, nodeBootTimeBefore)
 			})
 		})
 	})
@@ -232,6 +237,15 @@ func buildNodeParameters(clusterPlatformType configv1.PlatformType) (map[v1alpha
 	return testNodeParam, nil
 }
 
+// getNodeBootTime returns the bootime of node nodeName if possible, otherwise it returns an error
+func getNodeBootTime(nodeName string) (time.Time, error) {
+	bootTime, err := farE2eUtils.GetBootTime(clientSet, nodeName, testNsName, log)
+	if bootTime != nil && err == nil {
+		return *bootTime, nil
+	}
+	return time.Time{}, err
+}
+
 // checkFarLogs gets the FAR pod and checks whether it's logs have logString
 func checkFarLogs(logString string) {
 	var pod *corev1.Pod
@@ -253,4 +267,21 @@ func checkFarLogs(logString string) {
 		}
 		return logs
 	}, timeoutLogs, pollInterval).Should(ContainSubstring(logString))
+}
+
+// wasNodeRebooted waits until there is a newer boot time than before, a reboot occurred, otherwise it falls with an error
+func wasNodeRebooted(nodeName string, nodeBootTimeBefore time.Time) {
+	log.Info("boot time", "node", nodeName, "old", nodeBootTimeBefore)
+	var nodeBootTimeAfter time.Time
+	Eventually(func() (time.Time, error) {
+		var errBootAfter error
+		nodeBootTimeAfter, errBootAfter = getNodeBootTime(nodeName)
+		if errBootAfter != nil {
+			log.Error(errBootAfter, "Can't get boot time of the node")
+		}
+		return nodeBootTimeAfter, errBootAfter
+	}, timeoutReboot, pollInterval).Should(
+		BeTemporally(">", nodeBootTimeBefore), "Timeout for node reboot has passed, even though FAR CR has been created")
+
+	log.Info("successful reboot", "node", nodeName, "offset between last boot", nodeBootTimeAfter.Sub(nodeBootTimeBefore), "new boot time", nodeBootTimeAfter)
 }
