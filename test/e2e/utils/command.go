@@ -167,7 +167,7 @@ func getPod(nodeName string) *corev1.Pod {
 					Name:  "test",
 					Image: "registry.access.redhat.com/ubi8/ubi-minimal",
 					SecurityContext: &corev1.SecurityContext{
-						Privileged: pointer.Bool(true),
+						// Privileged: pointer.Bool(true),
 						AllowPrivilegeEscalation: pointer.Bool(false),
 						Capabilities: &corev1.Capabilities{
 							Drop: []corev1.Capability{"ALL"},
