@@ -151,8 +151,8 @@ func getPod(nodeName string) *corev1.Pod {
 		},
 		Spec: corev1.PodSpec{
 			NodeName:    nodeName,
-			HostNetwork: true,
-			HostPID:     true,
+			// HostNetwork: true,
+			// HostPID:     true,
 			SecurityContext: &corev1.PodSecurityContext{
 				// RunAsUser:  pointer.Int64(0),
 				RunAsGroup: pointer.Int64(0),
