@@ -17,6 +17,7 @@ import (
 
 const (
 	machinesNamespace   = "openshift-machine-api"
+	secretNamespace 	= "openshift-operators"
 	clusterPlatformName = "cluster"
 )
 
@@ -38,7 +39,7 @@ func GetCredentials(clientSet *kubernetes.Clientset, secretName, secretKey, secr
 	// oc get secrets -n openshift-machine-api aws-cloud-credentials -o jsonpath='{.data.aws_access_key_id}' | base64 -d
 	// oc get secrets -n openshift-machine-api aws-cloud-credentials -o jsonpath='{.data.aws_secret_access_key}' | base64 -d
 
-	secret, err := clientSet.CoreV1().Secrets(machinesNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
+	secret, err := clientSet.CoreV1().Secrets(secretNamespace).Get(context.Background(), secretName, metav1.GetOptions{})
 	if err != nil {
 		return "", "", err
 	}

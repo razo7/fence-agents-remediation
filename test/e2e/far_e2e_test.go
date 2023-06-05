@@ -169,7 +169,8 @@ func deleteFAR(far *v1alpha1.FenceAgentsRemediation) {
 func buildSharedParameters(clusterPlatform *configv1.Infrastructure, action string) (map[v1alpha1.ParameterName]string, error) {
 	const (
 		//AWS
-		secretAWS    = "aws-cloud-credentials"
+		// secretAWS    = "aws-cloud-credentials"
+		secretAWS    = "aws-cloud-fencing-credentials-secret"
 		secretKeyAWS = "aws_access_key_id"
 		secretValAWS = "aws_secret_access_key"
 
