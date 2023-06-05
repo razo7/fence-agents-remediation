@@ -18,6 +18,8 @@ SORT_IMPORTS_VERSION = v0.2.1
 GINKGO_VERSION ?= v2.9.5
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.23
+# See https://mirror.openshift.com/pub/openshift-v4/clients/ocp/4.13.0/ for the last version
+OC_VERSION ?= 4.13.0
 
 # IMAGE_REGISTRY used to indicate the registery/group for the operator, bundle and catalog
 IMAGE_REGISTRY ?= quay.io/medik8s
@@ -253,8 +255,8 @@ bundle-community: ## Update displayName field in the bundle's CSV
 	$(MAKE) bundle-update
 
 .PHONY: bundle-ocp-aws
-bundle-ocp-aws: kustomize ## Add CredentialsRequest
-	$(KUSTOMIZE) build config/ocp_aws | $(KUBECTL) apply -f -
+bundle-ocp-aws: kustomize oc ## Add CredentialsRequest
+	$(KUSTOMIZE) build config/ocp_aws | $(OC) apply -f -
 
 ##@ Build Dependencies
 
@@ -272,6 +274,7 @@ GOIMPORTS_DIR ?= $(LOCALBIN)/goimports
 OPM_DIR = $(LOCALBIN)/opm
 OPERATOR_SDK_DIR ?= $(LOCALBIN)/operator-sdk
 SORT_IMPORTS_DIR ?= $(LOCALBIN)/sort-imports
+OC_DIR ?= $(LOCALBIN)/oc
 
 ## Specific Tool Binaries
 KUSTOMIZE = $(KUSTOMIZE_DIR)/$(KUSTOMIZE_VERSION)/kustomize
@@ -282,6 +285,9 @@ GOIMPORTS = $(GOIMPORTS_DIR)/$(GOIMPORTS_VERSION)/goimports
 OPM = $(OPM_DIR)/$(OPM_VERSION)/opm
 OPERATOR_SDK = $(OPERATOR_SDK_DIR)/$(OPERATOR_SDK_VERSION)/operator-sdk
 SORT_IMPORTS = $(SORT_IMPORTS_DIR)/$(SORT_IMPORTS_VERSION)/sort-imports
+OC_TAR = $(OC_DIR)/$(OC_VERSION)/oc-tar
+OC_EXT = $(OC_DIR)/$(OC_VERSION)/oc-extracted
+OC = $(OC_DIR)/$(OC_VERSION)/oc-extracted/oc
 
 .PHONY: kustomize
 kustomize: ## Download kustomize locally if necessary.
@@ -350,6 +356,12 @@ opm: ## Download opm locally if necessary.
 operator-sdk: ## Download operator-sdk locally if necessary.
 	$(call url-install-tool, $(OPERATOR_SDK), $(OPERATOR_SDK_DIR),github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$${OS}_$${ARCH})
 
+.PHONY: oc
+oc: ## Download oc locally, and extract it if necessary.
+	$(call url-install-tool, $(OC_TAR), $(OC_DIR), mirror.openshift.com/pub/openshift-v4/clients/ocp/$(OC_VERSION)/openshift-client-linux-4.13.0.tar.gz)
+	mkdir -p $(OC_EXT) 2>/dev/null || true
+	tar -xzf $(OC_TAR) -C $(OC_EXT)
+
 # url-install-tool will delete old package $2, then download $3 to $1.
 define url-install-tool
 @[ -f $(1) ]|| { \
@@ -357,6 +369,7 @@ define url-install-tool
 	rm -rf $(2) ;\
 	mkdir -p $(dir $(1)) ;\
 	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
+	echo "Downloading $(3)" ;\
 	curl -sSLo $(1) $(3) ;\
 	chmod +x $(1) ;\
 	}
@@ -410,6 +423,6 @@ container-build-and-push-community: container-build-community container-push ## 
 # --keep-going:  If set, failures from earlier test suites do not prevent later test suites from running.
 # --require-suite: If set, Ginkgo fails if there are ginkgo tests in a directory but no invocation of RunSpecs.
 # --vv: If set, emits with maximal verbosity - includes skipped and pending tests.
-test-e2e: ginkgo ## Run end to end (E2E) tests
+test-e2e: bundle-ocp-aws ginkgo ## Run end to end (E2E) tests
 	@test -n "${KUBECONFIG}" -o -r ${HOME}/.kube/config || (echo "Failed to find kubeconfig in ~/.kube/config or no KUBECONFIG set"; exit 1)
 	$(GINKGO) -r --keep-going --require-suite --vv  ./test/e2e -coverprofile cover.out
