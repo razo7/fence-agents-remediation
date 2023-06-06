@@ -170,22 +170,24 @@ func buildSharedParameters(clusterPlatform *configv1.Infrastructure, action stri
 	const (
 		//AWS
 		// secretAWS    = "aws-cloud-credentials"
-		secretAWS    = "aws-cloud-fencing-credentials-secret"
-		secretKeyAWS = "aws_access_key_id"
-		secretValAWS = "aws_secret_access_key"
+		secretAWSName      = "aws-cloud-fencing-credentials-secret"
+		secretAWSNamespace = "openshift-operators"
+		secretKeyAWS       = "aws_access_key_id"
+		secretValAWS       = "aws_secret_access_key"
 
 		// BareMetal
 		//TODO: secret BM should be based on node name - > oc get bmh -n openshift-machine-api BM_NAME -o jsonpath='{.spec.bmc.credentialsName}'
-		secretBMHExample = "ostest-master-0-bmc-secret"
-		secretKeyBM      = "username"
-		secretValBM      = "password"
+		secretBMHName      = "ostest-master-0-bmc-secret"
+		secretBMHNamespace = "openshift-machine-api"
+		secretKeyBM        = "username"
+		secretValBM        = "password"
 	)
 	var testShareParam map[v1alpha1.ParameterName]string
 
 	// oc get Infrastructure.config.openshift.io/cluster -o jsonpath='{.status.platformStatus.type}'
 	clusterPlatformType := clusterPlatform.Status.PlatformStatus.Type
 	if clusterPlatformType == configv1.AWSPlatformType {
-		accessKey, secretKey, err := farE2eUtils.GetCredentials(clientSet, secretAWS, secretKeyAWS, secretValAWS)
+		accessKey, secretKey, err := farE2eUtils.GetCredentials(clientSet, secretAWSName, secretAWSNamespace, secretKeyAWS, secretValAWS)
 		if err != nil {
 			fmt.Printf("can't get AWS credentials\n")
 			return nil, err
@@ -206,7 +208,7 @@ func buildSharedParameters(clusterPlatform *configv1.Infrastructure, action stri
 		// TODO : get ip from GetCredientals
 		// oc get bmh -n openshift-machine-api ostest-master-0 -o jsonpath='{.spec.bmc.address}'
 		// then parse ip
-		username, password, err := farE2eUtils.GetCredentials(clientSet, secretBMHExample, secretKeyBM, secretValBM)
+		username, password, err := farE2eUtils.GetCredentials(clientSet, secretBMHName, secretBMHNamespace, secretKeyBM, secretValBM)
 		if err != nil {
 			fmt.Printf("can't get BMH credentials\n")
 			return nil, err
