@@ -1,2 +1,2 @@
 resources:
-- install/fence_aws_credentials-request.yaml
+- install/fence_aws_credentials_request.yaml

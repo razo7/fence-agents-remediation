@@ -34,7 +34,7 @@ const (
 
 	// eventually parameters
 	timeoutLogs   = 1 * time.Minute
-	timeoutReboot = 10 * time.Minute
+	timeoutReboot = 10 * time.Minute // fencing with fence_aws should be completed within 6 minutes
 	pollInterval  = 10 * time.Second
 )
 
