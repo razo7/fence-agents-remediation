@@ -14,11 +14,12 @@ import (
 
 	"github.com/medik8s/fence-agents-remediation/api/v1alpha1"
 )
+
 // See OCP API for Machine in https://docs.openshift.com/container-platform/latest/rest_api/machine_apis/machine-machine-openshift-io-v1beta1.html
 
 const (
 	machinesNamespace   = "openshift-machine-api"
-	secretNamespace 	= "openshift-operators"
+	secretNamespace     = "openshift-operators"
 	clusterPlatformName = "cluster"
 )
 

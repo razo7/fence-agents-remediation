@@ -195,10 +195,11 @@ func buildSharedParameters(clusterPlatform *configv1.Infrastructure, action stri
 		regionAWS := string(clusterPlatform.Status.PlatformStatus.AWS.Region)
 
 		testShareParam = map[v1alpha1.ParameterName]string{
-			"--access-key": accessKey,
-			"--secret-key": secretKey,
-			"--region":     regionAWS,
-			"--action":     action,
+			"--access-key":      accessKey,
+			"--secret-key":      secretKey,
+			"--region":          regionAWS,
+			"--action":          action,
+			"--skip-race-check": "",
 			// "--verbose":    "", // for verbose result
 		}
 	} else if clusterPlatformType == configv1.BareMetalPlatformType {
