@@ -121,42 +121,55 @@ func (r *FenceAgentsRemediationReconciler) Reconcile(ctx context.Context, req ct
 		r.Log.Info("Finalizer was removed", "CR Name", req.Name)
 		return emptyResult, nil
 	}
-
-	// Fetch the FAR's pod
-	r.Log.Info("Fetch FAR's pod")
-	pod, err := utils.GetFenceAgentsRemediationPod(r.Client)
+	// find node by name
+	node, err := utils.GetNodeWithName(r, req.Name)
 	if err != nil {
-		r.Log.Error(err, "Can't find FAR's pod by it's label", "CR's Name", req.Name)
 		return emptyResult, err
 	}
-	//TODO: Check that FA is excutable? run cli.IsExecuteable
+	// check if taint doesn't exist
+	taint := utils.CreateFARNoExecuteTaint()
+	hasNewTaint := utils.TaintExists(node.Spec.Taints, &taint)
 
-	// Build FA parameters
-	r.Log.Info("Combine fence agent parameters", "Fence Agent", far.Spec.Agent, "Node Name", req.Name)
-	faParams, err := buildFenceAgentParams(far)
-	if err != nil {
-		r.Log.Error(err, "Invalid sharedParameters/nodeParameters from CR", "CR's Name", req.Name)
-		return emptyResult, err
-	}
 	// Add medik8s remediation taint
 	r.Log.Info("Add Medik8s remediation taint", "Fence Agent", far.Spec.Agent, "Node Name", req.Name)
 	if err := utils.AppendTaint(r.Client, far.Name); err != nil {
 		return emptyResult, err
 	}
-	cmd := append([]string{far.Spec.Agent}, faParams...)
-	// The Fence Agent is excutable and the parameters structure are valid, but we don't check their values
-	r.Log.Info("Execute the fence agent", "Fence Agent", far.Spec.Agent, "Node Name", req.Name)
-	outputRes, outputErr, err := r.Executor.Execute(pod, cmd)
-	if err != nil {
-		// response was a failure message
-		r.Log.Error(err, "Fence Agent response was a failure", "CR's Name", req.Name)
-		return emptyResult, err
-	}
-	if outputErr != "" || outputRes == "" {
-		// response wasn't failure or sucesss message
-		err := fmt.Errorf("unknown fence agent response - expecting `%s` response, but we received `%s`", SuccessFAResponse, outputRes)
-		r.Log.Error(err, "Fence Agent response wasn't a success message", "CR's Name", req.Name)
-		return emptyResult, err
+	if hasNewTaint {
+		r.Log.Info("Don't build and exec FA when the remediation taint was not present in the beginning", "CR's Name", req.Name)
+	} else {
+		// Fetch the FAR's pod
+		r.Log.Info("Fetch FAR's pod")
+		pod, err := utils.GetFenceAgentsRemediationPod(r.Client)
+		if err != nil {
+			r.Log.Error(err, "Can't find FAR's pod by it's label", "CR's Name", req.Name)
+			return emptyResult, err
+		}
+		//TODO: Check that FA is excutable? run cli.IsExecuteable
+
+		// Build FA parameters
+		r.Log.Info("Combine fence agent parameters", "Fence Agent", far.Spec.Agent, "Node Name", req.Name)
+		faParams, err := buildFenceAgentParams(far)
+		if err != nil {
+			r.Log.Error(err, "Invalid sharedParameters/nodeParameters from CR", "CR's Name", req.Name)
+			return emptyResult, err
+		}
+
+		cmd := append([]string{far.Spec.Agent}, faParams...)
+		// The Fence Agent is excutable and the parameters structure are valid, but we don't check their values
+		r.Log.Info("Execute the fence agent", "Fence Agent", far.Spec.Agent, "Node Name", req.Name)
+		outputRes, outputErr, err := r.Executor.Execute(pod, cmd)
+		if err != nil {
+			// response was a failure message
+			r.Log.Error(err, "Fence Agent response was a failure", "CR's Name", req.Name)
+			return emptyResult, err
+		}
+		if outputErr != "" || outputRes == "" {
+			// response wasn't failure or sucesss message
+			err := fmt.Errorf("unknown fence agent response - expecting `%s` response, but we received `%s`", SuccessFAResponse, outputRes)
+			r.Log.Error(err, "Fence Agent response wasn't a success message", "CR's Name", req.Name)
+			return emptyResult, err
+		}
 	}
 	return emptyResult, nil
 }
