@@ -1,7 +1,7 @@
 # Build the manager binary
-FROM quay.io/centos/centos:stream8 AS builder
-RUN dnf install -y golang git \
-    && dnf clean all -y
+FROM quay.io/centos/centos:stream9-minimal AS builder
+RUN microdnf install -y golang git \
+    && microdnf clean all -y
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -30,16 +30,17 @@ COPY .git/ .git/
 # Build
 RUN ./hack/build.sh
 
-FROM quay.io/centos/centos:stream8
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.1.0
 
 WORKDIR /
 COPY --from=builder /workspace/manager .
 
-# Add Fence Agents and fence-agents-aws packages
-RUN dnf install -y dnf-plugins-core \
-    && dnf config-manager --set-enabled ha \
+# Add Fence Agents and 3 more cloud agents
+RUN microdnf install -y yum-utils \
+    && dnf config-manager --set-enabled rhel-9-for-x86_64-highavailability-rpms \
     && dnf install -y fence-agents-all fence-agents-aws fence-agents-azure-arm fence-agents-gce \
     && dnf clean all -y
 
 USER 65532:65532
+    # RUN yum-config-manager --set-enabled rhel-9-for-x86_64-highavailability-rpms
 ENTRYPOINT ["/manager"]
