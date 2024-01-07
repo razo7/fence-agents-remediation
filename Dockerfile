@@ -30,14 +30,14 @@ COPY .git/ .git/
 # Build
 RUN ./hack/build.sh
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.1.0
+FROM quay.io/centos/centos:stream9-minimal
 
 WORKDIR /
 COPY --from=builder /workspace/manager .
 
 # Add Fence Agents and 3 more cloud agents
 RUN microdnf install -y yum-utils \
-    && dnf config-manager --set-enabled rhel-9-for-x86_64-highavailability-rpms \
+    && dnf config-manager --set-enabled highavailability \
     && dnf install -y fence-agents-all fence-agents-aws fence-agents-azure-arm fence-agents-gce \
     && dnf clean all -y
 
