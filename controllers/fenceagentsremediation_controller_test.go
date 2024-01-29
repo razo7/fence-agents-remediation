@@ -149,14 +149,7 @@ var _ = Describe("FAR Controller", func() {
 			DeferCleanup(k8sClient.Delete, context.Background(), node)
 
 			Expect(k8sClient.Create(context.Background(), underTestFAR)).To(Succeed())
-			DeferCleanup(func() {
-				Expect(cleanupFar(context.Background(), underTestFAR)).To(Succeed())
-				deleteErr := k8sClient.Get(ctx, client.ObjectKeyFromObject(underTestFAR), &v1alpha1.FenceAgentsRemediation{})
-				if !apierrors.IsNotFound(deleteErr) {
-					verifyEvent(corev1.EventTypeNormal, utils.EventReasonRemoveFinalizer, utils.EventMessageRemoveFinalizer)
-				}
-				clearEvents()
-			})
+			DeferCleanup(clearEvents)
 
 			// Sleep for a second to ensure dummy reconciliation has begun running before the unit tests
 			time.Sleep(1 * time.Second)
@@ -194,6 +187,8 @@ var _ = Describe("FAR Controller", func() {
 					conditionStatusPointer(metav1.ConditionTrue))  // SucceededTypeStatus
 				verifyEvent(corev1.EventTypeNormal, utils.EventReasonFenceAgentSucceeded, utils.EventMessageFenceAgentSucceeded)
 				verifyEvent(corev1.EventTypeNormal, utils.EventReasonNodeRemediationCompleted, utils.EventMessageNodeRemediationCompleted)
+
+				verifyFarCrDeletion(context.Background(), underTestFAR)
 			})
 		})
 
@@ -232,6 +227,8 @@ var _ = Describe("FAR Controller", func() {
 					conditionStatusPointer(metav1.ConditionFalse)) // SucceededTypeStatus
 				verifyNoEvent(corev1.EventTypeNormal, utils.EventReasonFenceAgentSucceeded, utils.EventMessageFenceAgentSucceeded)
 				verifyNoEvent(corev1.EventTypeNormal, utils.EventReasonNodeRemediationCompleted, utils.EventReasonNodeRemediationCompleted)
+
+				verifyFarCrDeletion(context.Background(), underTestFAR)
 			})
 		})
 
@@ -241,6 +238,11 @@ var _ = Describe("FAR Controller", func() {
 				node = utils.GetNode("", workerNode)
 
 				underTestFAR = getFenceAgentsRemediation(workerNode, fenceAgentIPMI, testShareParam, testNodeParam)
+			})
+			JustBeforeEach(func() {
+				DeferCleanup(func() {
+					Expect(cleanupFar(context.Background(), underTestFAR)).To(Succeed())
+				})
 			})
 
 			When("CR is deleted in between fence agent retries", func() {
@@ -598,4 +600,13 @@ func cleanupFar(ctx context.Context, far *v1alpha1.FenceAgentsRemediation) error
 		return deleteErr
 	}, pollInterval, timeoutPostRemediation).Should(BeNil(), "CR should be deleted")
 	return nil
+}
+
+func verifyFarCrDeletion(ctx context.Context, far *v1alpha1.FenceAgentsRemediation) {
+	By("Verifying far CR deletion")
+	Expect(cleanupFar(context.Background(), far)).To(Succeed())
+	deleteErr := k8sClient.Get(ctx, client.ObjectKeyFromObject(far), &v1alpha1.FenceAgentsRemediation{})
+	if !apierrors.IsNotFound(deleteErr) {
+		verifyEvent(corev1.EventTypeNormal, utils.EventReasonRemoveFinalizer, utils.EventMessageRemoveFinalizer)
+	}
 }
